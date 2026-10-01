@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+
+import { Link, useNavigate } from "react-router-dom";
 
 import { Swiper, SwiperSlide } from "swiper/react";
+
 import { FreeMode } from "swiper/modules";
 
 import "swiper/css";
+
 import "swiper/css/free-mode";
 
 import { supabase } from "./supabase";
+
 import { useCart } from "./cartcontext";
 
 function DealsSection() {
     const [deals, setDeals] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const navigate = useNavigate();
 
     const {
         cart,
@@ -20,6 +26,14 @@ function DealsSection() {
         decreaseQuantity,
         increaseQuantity,
     } = useCart();
+
+    // =====================================================
+    // OPEN PRODUCT DETAILS
+    // =====================================================
+
+    const openProduct = (productId) => {
+        navigate(`/product/${productId}`);
+    };
 
     // =====================================================
     // GET DISCOUNTED PRODUCTS
@@ -116,7 +130,6 @@ function DealsSection() {
             {/* SECTION HEADER */}
 
             <div className="flex items-center justify-between mb-4">
-
                 <h2
                     className="
                         text-xl
@@ -139,7 +152,6 @@ function DealsSection() {
                 >
                     View all →
                 </Link>
-
             </div>
 
             {/* PRODUCTS */}
@@ -152,9 +164,7 @@ function DealsSection() {
                 grabCursor={true}
                 className="!overflow-visible"
             >
-
                 {deals.map((product) => {
-
                     const discount = getDiscount(
                         product.price,
                         product.offer_price
@@ -163,8 +173,7 @@ function DealsSection() {
                     const stock = Number(product.stock);
 
                     const cartItem = cart.find(
-                        (item) =>
-                            item.id === product.id
+                        (item) => item.id === product.id
                     );
 
                     return (
@@ -172,7 +181,6 @@ function DealsSection() {
                             key={product.id}
                             style={{ width: "144px" }}
                         >
-
                             <div
                                 className="
                                     bg-white
@@ -184,128 +192,137 @@ function DealsSection() {
                                 "
                             >
 
-                                {/* IMAGE */}
+                                {/* CLICKABLE PRODUCT AREA */}
 
                                 <div
-                                    className="
-                                        relative
-                                        h-28
-                                        bg-[var(--primary-light)]
-                                        flex
-                                        items-center
-                                        justify-center
-                                        overflow-hidden
-                                    "
+                                    onClick={() =>
+                                        openProduct(product.id)
+                                    }
+                                    className="cursor-pointer"
                                 >
-
-                                    {product.image_url ? (
-                                        <img
-                                            src={product.image_url}
-                                            alt={product.name}
-                                            className="
-                                                w-full
-                                                h-full
-                                                object-cover
-                                            "
-                                            loading="lazy"
-                                        />
-                                    ) : (
-                                        <span className="text-3xl">
-                                            🛒
-                                        </span>
-                                    )}
-
-                                    {/* DISCOUNT */}
-
-                                    {discount > 0 && (
-                                        <span
-                                            className="
-                                                absolute
-                                                top-1
-                                                left-1
-                                                bg-red-500
-                                                text-white
-                                                text-[10px]
-                                                font-bold
-                                                px-1.5
-                                                py-0.5
-                                                rounded-md
-                                            "
-                                        >
-                                            {discount}% OFF
-                                        </span>
-                                    )}
-
-                                </div>
-
-                                {/* DETAILS */}
-
-                                <div className="p-2.5">
-
-                                    <h3
-                                        className="
-                                            text-xs
-                                            font-semibold
-                                            text-[var(--text-main)]
-                                            line-clamp-2
-                                            min-h-[32px]
-                                        "
-                                    >
-                                        {product.name}
-                                    </h3>
-
-                                    {/* WEIGHT */}
-
-                                    <h3
-                                        className="
-                                            text-xs
-                                            font-semibold
-                                            text-[var(--primary)]
-                                            line-clamp-2
-                                            min-h-[32px]
-                                        "
-                                    >
-                                        {product.weight}
-                                    </h3>
-
-                                    {/* PRICE */}
+                                    {/* IMAGE */}
 
                                     <div
                                         className="
+                                            relative
+                                            h-28
+                                            bg-[var(--primary-light)]
                                             flex
                                             items-center
-                                            gap-1.5
-                                            mt-1.5
-                                            flex-wrap
+                                            justify-center
+                                            overflow-hidden
                                         "
                                     >
+                                        {product.image_url ? (
+                                            <img
+                                                src={product.image_url}
+                                                alt={product.name}
+                                                className="
+                                                    w-full
+                                                    h-full
+                                                    object-cover
+                                                "
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <span className="text-3xl">
+                                                🛒
+                                            </span>
+                                        )}
 
-                                        <span
-                                            className="
-                                                text-sm
-                                                font-bold
-                                                text-[var(--primary)]
-                                            "
-                                        >
-                                            ₹{product.offer_price}
-                                        </span>
+                                        {/* DISCOUNT */}
 
-                                        <span
-                                            className="
-                                                text-[10px]
-                                                text-gray-400
-                                                line-through
-                                            "
-                                        >
-                                            ₹{product.price}
-                                        </span>
-
+                                        {discount > 0 && (
+                                            <span
+                                                className="
+                                                    absolute
+                                                    top-1
+                                                    left-1
+                                                    bg-red-500
+                                                    text-white
+                                                    text-[10px]
+                                                    font-bold
+                                                    px-1.5
+                                                    py-0.5
+                                                    rounded-md
+                                                "
+                                            >
+                                                {discount}% OFF
+                                            </span>
+                                        )}
                                     </div>
 
-                                    {/* CART QUANTITY */}
+                                    {/* DETAILS */}
+
+                                    <div className="p-2.5">
+
+                                        {/* NAME */}
+
+                                        <h3
+                                            className="
+                                                text-xs
+                                                font-semibold
+                                                text-[var(--text-main)]
+                                                line-clamp-2
+                                                min-h-[32px]
+                                            "
+                                        >
+                                            {product.name}
+                                        </h3>
+
+                                        {/* WEIGHT */}
+
+                                        <h3
+                                            className="
+                                                text-xs
+                                                font-semibold
+                                                text-[var(--primary)]
+                                                line-clamp-2
+                                                min-h-[32px]
+                                            "
+                                        >
+                                            {product.weight}
+                                        </h3>
+
+                                        {/* PRICE */}
+
+                                        <div
+                                            className="
+                                                flex
+                                                items-center
+                                                gap-1.5
+                                                mt-1.5
+                                                flex-wrap
+                                            "
+                                        >
+                                            <span
+                                                className="
+                                                    text-sm
+                                                    font-bold
+                                                    text-[var(--primary)]
+                                                "
+                                            >
+                                                ₹{product.offer_price}
+                                            </span>
+
+                                            <span
+                                                className="
+                                                    text-[10px]
+                                                    text-gray-400
+                                                    line-through
+                                                "
+                                            >
+                                                ₹{product.price}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* CART CONTROLS */}
+
+                                <div className="px-2.5 pb-2.5">
 
                                     {stock > 0 && cartItem ? (
-
                                         <div
                                             className="
                                                 flex
@@ -318,7 +335,6 @@ function DealsSection() {
                                                 overflow-hidden
                                             "
                                         >
-
                                             <button
                                                 onClick={() =>
                                                     decreaseQuantity(
@@ -369,11 +385,8 @@ function DealsSection() {
                                             >
                                                 +
                                             </button>
-
                                         </div>
-
                                     ) : stock > 0 ? (
-
                                         <button
                                             onClick={() =>
                                                 addToCart(product)
@@ -393,9 +406,7 @@ function DealsSection() {
                                         >
                                             Add
                                         </button>
-
                                     ) : (
-
                                         <button
                                             disabled
                                             className="
@@ -411,19 +422,13 @@ function DealsSection() {
                                         >
                                             Out of Stock
                                         </button>
-
                                     )}
-
                                 </div>
-
                             </div>
-
                         </SwiperSlide>
                     );
                 })}
-
             </Swiper>
-
         </div>
     );
 }

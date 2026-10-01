@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+
+import { Link, useNavigate } from "react-router-dom";
 
 import { supabase } from "./supabase";
+
 import { useCart } from "./cartcontext";
 
 function NewArrivals() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const navigate = useNavigate();
 
     const {
         cart,
@@ -14,6 +18,14 @@ function NewArrivals() {
         decreaseQuantity,
         increaseQuantity,
     } = useCart();
+
+    // =====================================================
+    // OPEN PRODUCT DETAILS
+    // =====================================================
+
+    const openProduct = (productId) => {
+        navigate(`/product/${productId}`);
+    };
 
     // =====================================================
     // GET NEW PRODUCTS
@@ -72,9 +84,7 @@ function NewArrivals() {
     if (loading) {
         return (
             <div className="max-w-7xl mx-auto px-4 sm:px-5 mt-8 sm:mt-10">
-
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-
                     {[...Array(4)].map((_, i) => (
                         <div
                             key={i}
@@ -86,9 +96,7 @@ function NewArrivals() {
                             "
                         />
                     ))}
-
                 </div>
-
             </div>
         );
     }
@@ -111,7 +119,6 @@ function NewArrivals() {
             {/* HEADER */}
 
             <div className="flex items-center justify-between mb-4">
-
                 <h2
                     className="
                         text-xl
@@ -134,7 +141,6 @@ function NewArrivals() {
                 >
                     View all →
                 </Link>
-
             </div>
 
             {/* PRODUCT GRID */}
@@ -149,9 +155,7 @@ function NewArrivals() {
                     sm:gap-5
                 "
             >
-
                 {products.map((product) => {
-
                     const discount = getDiscount(
                         product.price,
                         product.offer_price
@@ -165,8 +169,7 @@ function NewArrivals() {
                     const stock = Number(product.stock);
 
                     const cartItem = cart.find(
-                        (item) =>
-                            item.id === product.id
+                        (item) => item.id === product.id
                     );
 
                     return (
@@ -185,42 +188,48 @@ function NewArrivals() {
                             "
                         >
 
-                            {/* IMAGE */}
+                            {/* CLICKABLE PRODUCT AREA */}
 
                             <div
-                                className="
-                                    relative
-                                    h-32
-                                    sm:h-40
-                                    bg-[var(--primary-light)]
-                                    flex
-                                    items-center
-                                    justify-center
-                                    overflow-hidden
-                                "
+                                onClick={() =>
+                                    openProduct(product.id)
+                                }
+                                className="cursor-pointer"
                             >
+                                {/* IMAGE */}
 
-                                {product.image_url ? (
-                                    <img
-                                        src={product.image_url}
-                                        alt={product.name}
-                                        className="
-                                            w-full
-                                            h-full
-                                            object-cover
-                                        "
-                                        loading="lazy"
-                                    />
-                                ) : (
-                                    <span className="text-4xl">
-                                        🛒
-                                    </span>
-                                )}
+                                <div
+                                    className="
+                                        relative
+                                        h-32
+                                        sm:h-40
+                                        bg-[var(--primary-light)]
+                                        flex
+                                        items-center
+                                        justify-center
+                                        overflow-hidden
+                                    "
+                                >
+                                    {product.image_url ? (
+                                        <img
+                                            src={product.image_url}
+                                            alt={product.name}
+                                            className="
+                                                w-full
+                                                h-full
+                                                object-cover
+                                            "
+                                            loading="lazy"
+                                        />
+                                    ) : (
+                                        <span className="text-4xl">
+                                            🛒
+                                        </span>
+                                    )}
 
-                                {/* DISCOUNT */}
+                                    {/* DISCOUNT */}
 
-                                {hasOffer &&
-                                    discount > 0 && (
+                                    {hasOffer && discount > 0 && (
                                         <span
                                             className="
                                                 absolute
@@ -238,57 +247,77 @@ function NewArrivals() {
                                             {discount}% OFF
                                         </span>
                                     )}
+                                </div>
 
-                            </div>
+                                {/* DETAILS */}
 
-                            {/* DETAILS */}
+                                <div className="p-3">
 
-                            <div className="p-3">
+                                    {/* NAME */}
 
-                                <h3
-                                    className="
-                                        font-semibold
-                                        text-sm
-                                        sm:text-base
-                                        text-[var(--text-main)]
-                                        line-clamp-2
-                                        min-h-[36px]
-                                    "
-                                >
-                                    {product.name}
-                                </h3>
+                                    <h3
+                                        className="
+                                            font-semibold
+                                            text-sm
+                                            sm:text-base
+                                            text-[var(--text-main)]
+                                            line-clamp-2
+                                            min-h-[36px]
+                                        "
+                                    >
+                                        {product.name}
+                                    </h3>
 
-                                {/* WEIGHT */}
+                                    {/* WEIGHT */}
 
-                                <h3
-                                    className="
-                                        font-semibold
-                                        text-sm
-                                        sm:text-base
-                                        text-[var(--primary)]
-                                        line-clamp-2
-                                        min-h-[36px]
-                                        mt-2
-                                    "
-                                >
-                                    {product.weight}
-                                </h3>
+                                    <h3
+                                        className="
+                                            font-semibold
+                                            text-sm
+                                            sm:text-base
+                                            text-[var(--primary)]
+                                            line-clamp-2
+                                            min-h-[36px]
+                                            mt-2
+                                        "
+                                    >
+                                        {product.weight}
+                                    </h3>
 
-                                {/* PRICE */}
+                                    {/* PRICE */}
 
-                                <div className="mt-2">
+                                    <div className="mt-2">
+                                        {hasOffer ? (
+                                            <div
+                                                className="
+                                                    flex
+                                                    items-center
+                                                    gap-2
+                                                    flex-wrap
+                                                "
+                                            >
+                                                <span
+                                                    className="
+                                                        text-base
+                                                        sm:text-lg
+                                                        font-bold
+                                                        text-[var(--primary)]
+                                                    "
+                                                >
+                                                    ₹{product.offer_price}
+                                                </span>
 
-                                    {hasOffer ? (
-
-                                        <div
-                                            className="
-                                                flex
-                                                items-center
-                                                gap-2
-                                                flex-wrap
-                                            "
-                                        >
-
+                                                <span
+                                                    className="
+                                                        text-xs
+                                                        text-gray-400
+                                                        line-through
+                                                    "
+                                                >
+                                                    ₹{product.price}
+                                                </span>
+                                            </div>
+                                        ) : (
                                             <span
                                                 className="
                                                     text-base
@@ -297,42 +326,18 @@ function NewArrivals() {
                                                     text-[var(--primary)]
                                                 "
                                             >
-                                                ₹{product.offer_price}
-                                            </span>
-
-                                            <span
-                                                className="
-                                                    text-xs
-                                                    text-gray-400
-                                                    line-through
-                                                "
-                                            >
                                                 ₹{product.price}
                                             </span>
-
-                                        </div>
-
-                                    ) : (
-
-                                        <span
-                                            className="
-                                                text-base
-                                                sm:text-lg
-                                                font-bold
-                                                text-[var(--primary)]
-                                            "
-                                        >
-                                            ₹{product.price}
-                                        </span>
-
-                                    )}
-
+                                        )}
+                                    </div>
                                 </div>
+                            </div>
 
-                                {/* CART */}
+                            {/* CART CONTROLS */}
+
+                            <div className="px-3 pb-3">
 
                                 {stock > 0 && cartItem ? (
-
                                     <div
                                         className="
                                             flex
@@ -345,7 +350,6 @@ function NewArrivals() {
                                             overflow-hidden
                                         "
                                     >
-
                                         <button
                                             onClick={() =>
                                                 decreaseQuantity(
@@ -394,11 +398,8 @@ function NewArrivals() {
                                         >
                                             +
                                         </button>
-
                                     </div>
-
                                 ) : stock > 0 ? (
-
                                     <button
                                         onClick={() =>
                                             addToCart(product)
@@ -418,9 +419,7 @@ function NewArrivals() {
                                     >
                                         🛒 Add to Cart
                                     </button>
-
                                 ) : (
-
                                     <button
                                         disabled
                                         className="
@@ -436,17 +435,12 @@ function NewArrivals() {
                                     >
                                         Out of Stock
                                     </button>
-
                                 )}
-
                             </div>
-
                         </div>
                     );
                 })}
-
             </div>
-
         </div>
     );
 }

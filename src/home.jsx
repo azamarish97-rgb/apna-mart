@@ -7,6 +7,7 @@ import AllProducts from "./AllProducts";
 import WhyChooseUs from "./WhyChooseUs";
 import Footer from "./Footer";
 
+
 function Home() {
     return (
         <main className="bg-[var(--page-bg)] min-h-screen text-[var(--text-main)]">

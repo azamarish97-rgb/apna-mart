@@ -1,7 +1,13 @@
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
 
 import Home from "./home";
 import Products from "./products";
+import ProductDetails from "./ProductDetails";
 import Cart from "./cart";
 import Login from "./login";
 import Signup from "./signup";
@@ -17,38 +23,98 @@ import AdminDashboard from "./AdminDashboard";
 import Search from "./Search";
 import BottomNav from "./BottomNav";
 
-// ================= LAYOUT WRAPPER (Navbar/BottomNav conditionally dikhane ke liye) =================
+// ================= LAYOUT WRAPPER =================
 
 function AppLayout() {
   const location = useLocation();
 
-  // jin routes pe Navbar/BottomNav NAHI dikhana, unke paths yaha daalo
   const hideNavRoutes = ["/search"];
 
-  const hideNav = hideNavRoutes.includes(location.pathname);
+  const hideNav =
+    hideNavRoutes.includes(location.pathname);
 
   return (
     <>
       {!hideNav && <Navbar />}
 
       <Routes>
+
         {/* User Pages */}
-        <Route path="/" element={<Home />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/order-success" element={<OrderSuccess />} />
-        <Route path="/my-orders" element={<MyOrders />} />
-        <Route path="/order/:id" element={<OrderDetails />} />
+
+        <Route
+          path="/"
+          element={<Home />}
+        />
+
+        <Route
+          path="/products"
+          element={<Products />}
+        />
+
+        {/* Product Profile */}
+
+        <Route
+          path="/product/:id"
+          element={<ProductDetails />}
+        />
+
+        <Route
+          path="/cart"
+          element={<Cart />}
+        />
+
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        <Route
+          path="/signup"
+          element={<Signup />}
+        />
+
+        <Route
+          path="/order-success"
+          element={<OrderSuccess />}
+        />
+
+        <Route
+          path="/my-orders"
+          element={<MyOrders />}
+        />
+
+        <Route
+          path="/order/:id"
+          element={<OrderDetails />}
+        />
 
         {/* Admin Pages */}
-        <Route path="/admin-login" element={<AdminLogin />} />
-        <Route path="/admin/orders" element={<AdminOrders />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
-        <Route path="/search" element={<Search />} />
+        <Route
+          path="/admin-login"
+          element={<AdminLogin />}
+        />
+
+        <Route
+          path="/admin/orders"
+          element={<AdminOrders />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
+        />
+
+        <Route
+          path="/admin/dashboard"
+          element={<AdminDashboard />}
+        />
+
+        <Route
+          path="/search"
+          element={<Search />}
+        />
+
       </Routes>
 
       {!hideNav && <BottomNav />}
@@ -61,9 +127,11 @@ function AppLayout() {
 function App() {
   return (
     <CartProvider>
+
       <BrowserRouter>
         <AppLayout />
       </BrowserRouter>
+
     </CartProvider>
   );
 }

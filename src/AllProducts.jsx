@@ -7,8 +7,7 @@ import {
 
 import { supabase } from "./supabase";
 import { useCart } from "./cartcontext";
-
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 function AllProducts() {
     const [products, setProducts] = useState([]);
@@ -17,6 +16,8 @@ function AllProducts() {
     const [hasMore, setHasMore] = useState(true);
 
     const [searchParams] = useSearchParams();
+
+    const navigate = useNavigate();
 
     const selectedCategory =
         searchParams.get("category");
@@ -178,6 +179,7 @@ function AllProducts() {
                 BATCH_SIZE
             ) {
                 hasMoreRef.current = false;
+
                 setHasMore(false);
 
                 console.log(
@@ -187,6 +189,7 @@ function AllProducts() {
                 pageRef.current += 1;
 
                 hasMoreRef.current = true;
+
                 setHasMore(true);
 
                 console.log(
@@ -210,6 +213,7 @@ function AllProducts() {
         setProducts([]);
 
         pageRef.current = 0;
+
         hasMoreRef.current = true;
 
         setHasMore(true);
@@ -250,6 +254,7 @@ function AllProducts() {
                     windowHeight);
 
             // 800px before bottom
+
             if (
                 distanceFromBottom <=
                 800
@@ -271,6 +276,7 @@ function AllProducts() {
         );
 
         // Initial check
+
         handleScroll();
 
         return () => {
@@ -280,6 +286,16 @@ function AllProducts() {
             );
         };
     }, [loadProducts]);
+
+    // =====================================================
+    // PRODUCT PROFILE NAVIGATION
+    // =====================================================
+
+    const openProduct = (productId) => {
+        navigate(
+            `/product/${productId}`
+        );
+    };
 
     // =====================================================
     // INITIAL LOADING
@@ -297,13 +313,14 @@ function AllProducts() {
             >
                 <div className="max-w-7xl mx-auto">
 
-                    <div className="
-                        flex
-                        justify-center
-                        items-center
-                        py-20
-                    ">
-
+                    <div
+                        className="
+                            flex
+                            justify-center
+                            items-center
+                            py-20
+                        "
+                    >
                         <div className="text-center">
 
                             <div
@@ -331,7 +348,6 @@ function AllProducts() {
                             </h2>
 
                         </div>
-
                     </div>
 
                 </div>
@@ -354,7 +370,6 @@ function AllProducts() {
                 sm:py-10
             "
         >
-
             <div className="max-w-7xl mx-auto">
 
                 {/* HEADER */}
@@ -485,175 +500,222 @@ function AllProducts() {
                                             "
                                         >
 
-                                            {/* IMAGE */}
+                                            {/* ==================================
+                                                CLICKABLE PRODUCT AREA
+                                            ================================== */}
 
                                             <div
+                                                onClick={() =>
+                                                    openProduct(
+                                                        product.id
+                                                    )
+                                                }
                                                 className="
-                                                    relative
-                                                    h-40
-                                                    sm:h-48
-                                                    bg-[var(--primary-light)]
-                                                    flex
-                                                    items-center
-                                                    justify-center
-                                                    overflow-hidden
+                                                    cursor-pointer
                                                 "
                                             >
 
-                                                {product.image_url ? (
+                                                {/* IMAGE */}
 
-                                                    <img
-                                                        src={
-                                                            product.image_url
-                                                        }
-                                                        alt={
-                                                            product.name
-                                                        }
-                                                        loading="lazy"
-                                                        className="
-                                                            w-full
-                                                            h-full
-                                                            object-cover
-                                                            hover:scale-105
-                                                            transition
-                                                            duration-300
-                                                        "
-                                                        onError={(
-                                                            e
-                                                        ) => {
-                                                            e.currentTarget.style.display =
-                                                                "none";
-                                                        }}
-                                                    />
+                                                <div
+                                                    className="
+                                                        relative
+                                                        h-40
+                                                        sm:h-48
+                                                        bg-[var(--primary-light)]
+                                                        flex
+                                                        items-center
+                                                        justify-center
+                                                        overflow-hidden
+                                                    "
+                                                >
 
-                                                ) : (
+                                                    {product.image_url ? (
 
-                                                    <span className="text-5xl">
-                                                        🛒
-                                                    </span>
-
-                                                )}
-
-                                                {/* DISCOUNT */}
-
-                                                {hasOffer &&
-                                                    discount >
-                                                    0 && (
-
-                                                        <span
+                                                        <img
+                                                            src={
+                                                                product.image_url
+                                                            }
+                                                            alt={
+                                                                product.name
+                                                            }
+                                                            loading="lazy"
                                                             className="
-                                                                absolute
-                                                                top-2
-                                                                left-2
-                                                                bg-red-500
-                                                                text-white
-                                                                text-xs
-                                                                sm:text-sm
-                                                                font-bold
-                                                                px-2
-                                                                py-1
-                                                                rounded-lg
+                                                                w-full
+                                                                h-full
+                                                                object-cover
+                                                                hover:scale-105
+                                                                transition
+                                                                duration-300
                                                             "
-                                                        >
-                                                            {
-                                                                discount
-                                                            }%
-                                                            OFF
+                                                            onError={(
+                                                                e
+                                                            ) => {
+                                                                e.currentTarget.style.display =
+                                                                    "none";
+                                                            }}
+                                                        />
+
+                                                    ) : (
+
+                                                        <span className="text-5xl">
+                                                            🛒
                                                         </span>
 
                                                     )}
 
-                                            </div>
+                                                    {/* DISCOUNT */}
 
-                                            {/* CONTENT */}
+                                                    {hasOffer &&
+                                                        discount >
+                                                        0 && (
 
-                                            <div className="p-3 sm:p-4">
+                                                            <span
+                                                                className="
+                                                                    absolute
+                                                                    top-2
+                                                                    left-2
+                                                                    bg-red-500
+                                                                    text-white
+                                                                    text-xs
+                                                                    sm:text-sm
+                                                                    font-bold
+                                                                    px-2
+                                                                    py-1
+                                                                    rounded-lg
+                                                                "
+                                                            >
+                                                                {
+                                                                    discount
+                                                                }%
+                                                                OFF
+                                                            </span>
 
-                                                {/* CATEGORY */}
+                                                        )}
 
-                                                <p
-                                                    className="
-                                                        text-xs
-                                                        sm:text-sm
-                                                        text-gray-500
-                                                        truncate
-                                                    "
-                                                >
-                                                    {product.category ||
-                                                        "Grocery"}
-                                                </p>
+                                                </div>
 
-                                                {/* NAME */}
+                                                {/* CONTENT */}
 
-                                                <h2
-                                                    className="
-                                                        font-semibold
-                                                        text-base
-                                                        sm:text-lg
-                                                        text-[var(--text-main)]
-                                                        mt-1
-                                                        line-clamp-2
-                                                        min-h-[40px]
-                                                    "
-                                                >
-                                                    {
-                                                        product.name
-                                                    }
-                                                </h2>
+                                                <div className="p-3 sm:p-4">
 
-                                                {/* WEIGHT */}
-
-                                                {product.weight && (
+                                                    {/* CATEGORY */}
 
                                                     <p
                                                         className="
                                                             text-xs
                                                             sm:text-sm
                                                             text-gray-500
+                                                            truncate
+                                                        "
+                                                    >
+                                                        {product.category ||
+                                                            "Grocery"}
+                                                    </p>
+
+                                                    {/* NAME */}
+
+                                                    <h2
+                                                        className="
+                                                            font-semibold
+                                                            text-base
+                                                            sm:text-lg
+                                                            text-[var(--text-main)]
                                                             mt-1
-                                                        "
-                                                    >
-                                                        {
-                                                            product.weight
-                                                        }
-                                                    </p>
-
-                                                )}
-
-                                                {/* DESCRIPTION */}
-
-                                                {product.description && (
-
-                                                    <p
-                                                        className="
-                                                            text-xs
-                                                            sm:text-sm
-                                                            text-gray-500
-                                                            mt-2
                                                             line-clamp-2
+                                                            min-h-[40px]
                                                         "
                                                     >
                                                         {
-                                                            product.description
+                                                            product.name
                                                         }
-                                                    </p>
+                                                    </h2>
 
-                                                )}
+                                                    {/* WEIGHT */}
 
-                                                {/* PRICE */}
+                                                    {product.weight && (
 
-                                                <div className="mt-3">
-
-                                                    {hasOffer ? (
-
-                                                        <div
+                                                        <p
                                                             className="
-                                                                flex
-                                                                items-center
-                                                                gap-2
-                                                                flex-wrap
+                                                                text-xs
+                                                                sm:text-sm
+                                                                text-gray-500
+                                                                mt-1
                                                             "
                                                         >
+                                                            {
+                                                                product.weight
+                                                            }
+                                                        </p>
+
+                                                    )}
+
+                                                    {/* DESCRIPTION */}
+
+                                                    {product.description && (
+
+                                                        <p
+                                                            className="
+                                                                text-xs
+                                                                sm:text-sm
+                                                                text-gray-500
+                                                                mt-2
+                                                                line-clamp-2
+                                                            "
+                                                        >
+                                                            {
+                                                                product.description
+                                                            }
+                                                        </p>
+
+                                                    )}
+
+                                                    {/* PRICE */}
+
+                                                    <div className="mt-3">
+
+                                                        {hasOffer ? (
+
+                                                            <div
+                                                                className="
+                                                                    flex
+                                                                    items-center
+                                                                    gap-2
+                                                                    flex-wrap
+                                                                "
+                                                            >
+
+                                                                <span
+                                                                    className="
+                                                                        text-lg
+                                                                        sm:text-xl
+                                                                        font-bold
+                                                                        text-[var(--primary)]
+                                                                    "
+                                                                >
+                                                                    ₹
+                                                                    {
+                                                                        product.offer_price
+                                                                    }
+                                                                </span>
+
+                                                                <span
+                                                                    className="
+                                                                        text-xs
+                                                                        sm:text-sm
+                                                                        text-gray-400
+                                                                        line-through
+                                                                    "
+                                                                >
+                                                                    ₹
+                                                                    {
+                                                                        product.price
+                                                                    }
+                                                                </span>
+
+                                                            </div>
+
+                                                        ) : (
 
                                                             <span
                                                                 className="
@@ -665,83 +727,60 @@ function AllProducts() {
                                                             >
                                                                 ₹
                                                                 {
-                                                                    product.offer_price
-                                                                }
-                                                            </span>
-
-                                                            <span
-                                                                className="
-                                                                    text-xs
-                                                                    sm:text-sm
-                                                                    text-gray-400
-                                                                    line-through
-                                                                "
-                                                            >
-                                                                ₹
-                                                                {
                                                                     product.price
                                                                 }
                                                             </span>
 
-                                                        </div>
+                                                        )}
 
-                                                    ) : (
+                                                    </div>
 
-                                                        <span
-                                                            className="
-                                                                text-lg
-                                                                sm:text-xl
-                                                                font-bold
-                                                                text-[var(--primary)]
-                                                            "
-                                                        >
-                                                            ₹
-                                                            {
-                                                                product.price
-                                                            }
-                                                        </span>
+                                                    {/* STOCK */}
 
-                                                    )}
+                                                    <div className="mt-2">
 
-                                                </div>
+                                                        {stock > 0 ? (
 
-                                                {/* STOCK */}
+                                                            <p
+                                                                className="
+                                                                    text-xs
+                                                                    sm:text-sm
+                                                                    text-gray-600
+                                                                "
+                                                            >
+                                                                📦 Stock:{" "}
+                                                                {
+                                                                    stock
+                                                                }
+                                                            </p>
 
-                                                <div className="mt-2">
+                                                        ) : (
 
-                                                    {stock > 0 ? (
+                                                            <p
+                                                                className="
+                                                                    text-xs
+                                                                    sm:text-sm
+                                                                    font-semibold
+                                                                    text-red-600
+                                                                "
+                                                            >
+                                                                ❌ Out of Stock
+                                                            </p>
 
-                                                        <p
-                                                            className="
-                                                                text-xs
-                                                                sm:text-sm
-                                                                text-gray-600
-                                                            "
-                                                        >
-                                                            📦 Stock:{" "}
-                                                            {
-                                                                stock
-                                                            }
-                                                        </p>
+                                                        )}
 
-                                                    ) : (
-
-                                                        <p
-                                                            className="
-                                                                text-xs
-                                                                sm:text-sm
-                                                                font-semibold
-                                                                text-red-600
-                                                            "
-                                                        >
-                                                            ❌ Out of Stock
-                                                        </p>
-
-                                                    )}
+                                                    </div>
 
                                                 </div>
 
-                                                {/* CART */}
+                                            </div>
+
+                                            {/* ==================================
+                                                CART CONTROLS
+                                                Separate from clickable area
+                                            ================================== */}
+
+                                            <div className="px-3 pb-3 sm:px-4 sm:pb-4">
 
                                                 {stock > 0 &&
                                                     cartItem ? (
@@ -751,7 +790,6 @@ function AllProducts() {
                                                             flex
                                                             items-center
                                                             justify-between
-                                                            mt-4
                                                             border
                                                             border-gray-200
                                                             rounded-xl
@@ -836,7 +874,6 @@ function AllProducts() {
                                                         }
                                                         className="
                                                             w-full
-                                                            mt-4
                                                             bg-[var(--primary)]
                                                             text-white
                                                             py-2.5
@@ -856,7 +893,6 @@ function AllProducts() {
                                                         disabled
                                                         className="
                                                             w-full
-                                                            mt-4
                                                             bg-gray-200
                                                             text-gray-500
                                                             py-2.5
@@ -947,7 +983,6 @@ function AllProducts() {
                 )}
 
             </div>
-
         </main>
     );
 }

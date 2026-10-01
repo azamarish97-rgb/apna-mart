@@ -969,9 +969,9 @@ function ProductDetails() {
                         )}
                     </div>
                 </div>
-                <OfferStrip />
+                {/* <OfferStrip />
                 <DealsSection />
-                <Banner />
+                <Banner /> */}
             </div>
         </main>
     );

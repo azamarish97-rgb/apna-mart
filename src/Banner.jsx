@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination } from "swiper/modules";
+
 import "swiper/css";
 import "swiper/css/pagination";
+
 import { supabase } from "./supabase";
 
 function Banner() {
@@ -35,21 +37,64 @@ function Banner() {
         getBanners();
     }, []);
 
+    // =====================================================
+    // BANNER CLICK
+    // =====================================================
+
     const handleClick = (link) => {
-        if (link) {
-            navigate(link);
+        if (!link) return;
+
+        // External URL
+        if (
+            link.startsWith("http://") ||
+            link.startsWith("https://")
+        ) {
+            window.open(
+                link,
+                "_blank",
+                "noopener,noreferrer"
+            );
+
+            return;
         }
+
+        // Internal React route
+        navigate(link);
     };
+
+    // =====================================================
+    // LOADING
+    // =====================================================
 
     if (loading) {
         return (
-            <div className="w-full h-40 sm:h-56 md:h-72 bg-gray-100 rounded-2xl animate-pulse mx-auto max-w-7xl"></div>
+            <div
+                className="
+                    w-full
+                    h-40
+                    sm:h-56
+                    md:h-72
+                    rounded-2xl
+                    animate-pulse
+                    mx-auto
+                    max-w-7xl
+                    bg-[var(--primary-light)]
+                "
+            />
         );
     }
+
+    // =====================================================
+    // NO BANNERS
+    // =====================================================
 
     if (banners.length === 0) {
         return null;
     }
+
+    // =====================================================
+    // BANNER
+    // =====================================================
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-5 pt-4 sm:pt-6">
@@ -57,28 +102,53 @@ function Banner() {
             <Swiper
                 modules={[Autoplay, Pagination]}
                 slidesPerView={1}
-                loop={true}
+                loop={banners.length > 1}
                 autoplay={{
                     delay: 3000,
                     disableOnInteraction: false,
                 }}
-                pagination={{ clickable: true }}
+                pagination={{
+                    clickable: true,
+                }}
                 speed={700}
                 className="rounded-2xl overflow-hidden shadow-sm"
             >
                 {banners.map((banner) => (
                     <SwiperSlide key={banner.id}>
+
                         <div
-                            onClick={() => handleClick(banner.link_url)}
-                            className={`w-full h-40 sm:h-56 md:h-72 ${banner.link_url ? "cursor-pointer" : ""
-                                }`}
+                            onClick={() =>
+                                handleClick(
+                                    banner.link_url
+                                )
+                            }
+                            className={`
+                                w-full
+                                h-40
+                                sm:h-56
+                                md:h-72
+                                overflow-hidden
+                                ${banner.link_url
+                                    ? "cursor-pointer"
+                                    : ""
+                                }
+                            `}
                         >
+
                             <img
                                 src={banner.image_url}
-                                alt="Banner"
-                                className="w-full h-full object-cover"
+                                alt="Apna Mart Banner"
+                                className="
+                                    w-full
+                                    h-full
+                                    object-cover
+                                    block
+                                "
+                                loading="lazy"
                             />
+
                         </div>
+
                     </SwiperSlide>
                 ))}
             </Swiper>

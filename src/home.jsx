@@ -9,7 +9,8 @@ import Footer from "./Footer";
 
 function Home() {
     return (
-        <main className="bg-gray-50 min-h-screen">
+        <main className="bg-[var(--page-bg)] min-h-screen text-[var(--text-main)]">
+
             <Banner />
 
             <Categories />
@@ -18,14 +19,22 @@ function Home() {
 
             <DealsSection />
 
+            <Banner />
+
             <NewArrivals />
 
+            <Banner />
+
             {/* ALL PRODUCTS */}
+
             <AllProducts />
+
+            <Banner />
 
             <WhyChooseUs />
 
             <Footer />
+
         </main>
     );
 }

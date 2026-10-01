@@ -1,16 +1,30 @@
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Papa from "papaparse";
+import { supabase } from "./supabase";
+
+const MAX_BULK_DELETE = 50;
 
 function AdminDashboard() {
     const navigate = useNavigate();
+    const fileInputRef = useRef(null);
+    const bannerFileInputRef = useRef(null);
+
+    // ======================================================
+    // PRODUCTS
+    // ======================================================
 
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [bulkUploading, setBulkUploading] = useState(false);
+
     const [editingId, setEditingId] = useState(null);
+
+    const [productSearch, setProductSearch] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("all");
+
+    const [selectedProducts, setSelectedProducts] = useState([]);
 
     const [form, setForm] = useState({
         name: "",
@@ -19,72 +33,160 @@ function AdminDashboard() {
         category: "",
         description: "",
         stock: "",
-        weight:"",
+        weight: "",
         image_url: "",
         is_active: true,
     });
 
-    // ================= CHECK ADMIN =================
+    // ======================================================
+    // BANNERS
+    // ======================================================
+
+    const [banners, setBanners] = useState([]);
+    const [bannerLoading, setBannerLoading] = useState(false);
+    const [bannerSaving, setBannerSaving] = useState(false);
+
+    const [editingBannerId, setEditingBannerId] = useState(null);
+
+    const [bannerForm, setBannerForm] = useState({
+        image_url: "",
+        link_url: "",
+        sort_order: 0,
+        is_active: true,
+    });
+
+    const [bannerFile, setBannerFile] = useState(null);
+    const [bannerPreview, setBannerPreview] = useState("");
+
+    // ======================================================
+    // ADMIN CHECK
+    // ======================================================
 
     useEffect(() => {
         checkAdmin();
     }, []);
 
     const checkAdmin = async () => {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+        try {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
 
-        if (!user) {
-            navigate("/admin-login");
-            return;
-        }
+            if (!user) {
+                navigate("/login");
+                return;
+            }
 
-        const { data: profile, error } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .maybeSingle();
+            const { data: profile, error } = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .single();
 
-        if (error) {
+            if (error) {
+                console.error("PROFILE ERROR:", error);
+                navigate("/");
+                return;
+            }
+
+            if (profile?.role !== "admin") {
+                alert("Admin access required ❌");
+                navigate("/");
+                return;
+            }
+
+            await Promise.all([
+                fetchProducts(),
+                fetchBanners(),
+            ]);
+        } catch (error) {
             console.error("ADMIN CHECK ERROR:", error);
-            alert("Admin verification failed.");
             navigate("/");
-            return;
         }
-
-        if (profile?.role !== "admin") {
-            alert("Access denied ❌");
-            navigate("/");
-            return;
-        }
-
-        fetchProducts();
     };
 
-    // ================= FETCH PRODUCTS =================
+    // ======================================================
+    // FETCH PRODUCTS
+    // ======================================================
 
     const fetchProducts = async () => {
-        setLoading(true);
+        try {
+            setLoading(true);
 
-        const { data, error } = await supabase
-            .from("products")
-            .select("*")
-            .order("created_at", { ascending: false });
+            const { data, error } = await supabase
+                .from("products")
+                .select("*")
+                .order("created_at", {
+                    ascending: false,
+                });
 
-        if (error) {
-            console.error("FETCH PRODUCTS ERROR:", error);
-            alert("Products load nahi ho paaye ❌");
-        } else {
+            if (error) {
+                console.error("PRODUCT FETCH ERROR:", error);
+                alert(`Products load nahi hue ❌\n\n${error.message}`);
+                return;
+            }
+
             setProducts(data || []);
-        }
 
-        setLoading(false);
+            // Remove selected IDs that no longer exist
+            const existingIds = new Set(
+                (data || []).map((product) => String(product.id))
+            );
+
+            setSelectedProducts((prev) =>
+                prev.filter((id) => existingIds.has(String(id)))
+            );
+        } catch (error) {
+            console.error("PRODUCT FETCH ERROR:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // ================= INPUT CHANGE =================
+    // ======================================================
+    // PRODUCT CATEGORIES
+    // ======================================================
 
-    const handleChange = (e) => {
+    const categories = useMemo(() => {
+        const values = products
+            .map((product) => product.category)
+            .filter(Boolean)
+            .map((category) => category.trim());
+
+        return [...new Set(values)].sort();
+    }, [products]);
+
+    // ======================================================
+    // FILTERED PRODUCTS
+    // ======================================================
+
+    const filteredProducts = useMemo(() => {
+        const search = productSearch.trim().toLowerCase();
+
+        return products.filter((product) => {
+            const matchesSearch =
+                !search ||
+                product.name?.toLowerCase().includes(search) ||
+                product.category?.toLowerCase().includes(search) ||
+                product.description?.toLowerCase().includes(search);
+
+            const matchesCategory =
+                categoryFilter === "all" ||
+                product.category === categoryFilter;
+
+            return matchesSearch && matchesCategory;
+        });
+    }, [
+        products,
+        productSearch,
+        categoryFilter,
+    ]);
+
+    // ======================================================
+    // PRODUCT FORM
+    // ======================================================
+
+    const handleProductChange = (e) => {
         const { name, value, type, checked } = e.target;
 
         setForm((prev) => ({
@@ -92,8 +194,6 @@ function AdminDashboard() {
             [name]: type === "checkbox" ? checked : value,
         }));
     };
-
-    // ================= RESET FORM =================
 
     const resetForm = () => {
         setForm({
@@ -111,38 +211,20 @@ function AdminDashboard() {
         setEditingId(null);
     };
 
-    // ================= DISCOUNT =================
+    // ======================================================
+    // ADD / UPDATE PRODUCT
+    // ======================================================
 
-    const getDiscount = (price, offerPrice) => {
-        if (
-            !price ||
-            !offerPrice ||
-            Number(offerPrice) >= Number(price)
-        ) {
-            return 0;
-        }
-
-        return Math.round(
-            ((Number(price) - Number(offerPrice)) /
-                Number(price)) *
-            100
-        );
-    };
-
-    // ================= ADD / UPDATE =================
-    
-    const handleSubmit = async (e) => {
+    const handleProductSubmit = async (e) => {
         e.preventDefault();
 
-        if (saving) return;
-
         if (!form.name.trim()) {
-            alert("Product name enter karo.");
+            alert("Product name required ❌");
             return;
         }
 
         if (form.price === "" || Number(form.price) < 0) {
-            alert("Valid original price enter karo.");
+            alert("Valid price enter karo ❌");
             return;
         }
 
@@ -150,204 +232,78 @@ function AdminDashboard() {
             form.offer_price !== "" &&
             Number(form.offer_price) < 0
         ) {
-            alert("Valid offer price enter karo.");
-            return;
-        }
-
-        if (
-            form.offer_price !== "" &&
-            Number(form.offer_price) > Number(form.price)
-        ) {
-            alert("Offer price original price se zyada nahi ho sakta.");
+            alert("Valid offer price enter karo ❌");
             return;
         }
 
         if (form.stock === "" || Number(form.stock) < 0) {
-            alert("Valid stock enter karo.");
+            alert("Valid stock enter karo ❌");
             return;
         }
 
-        setSaving(true);
-
-        const productData = {
-            name: form.name.trim(),
-            price: Number(form.price),
-
-            offer_price:
-                form.offer_price === ""
-                    ? null
-                    : Number(form.offer_price),
-
-            category: form.category.trim(),
-
-            description: form.description.trim(),
-
-            stock: Number(form.stock),
-            weight: form.weight.trim() || null,
-
-            image_url: form.image_url.trim() || null,
-
-            is_active: form.is_active,
-
-            updated_at: new Date().toISOString(),
-        };
-
         try {
-            // ================= UPDATE =================
+            setSaving(true);
+
+            const productData = {
+                name: form.name.trim(),
+                price: Number(form.price),
+                offer_price:
+                    form.offer_price === ""
+                        ? null
+                        : Number(form.offer_price),
+                category: form.category.trim() || null,
+                description: form.description.trim() || null,
+                stock: Number(form.stock),
+                weight: form.weight.trim() || null,
+                image_url: form.image_url.trim() || null,
+                is_active: form.is_active,
+                updated_at: new Date().toISOString(),
+            };
+
+            let error;
 
             if (editingId) {
-                const { error } = await supabase
+                const result = await supabase
                     .from("products")
                     .update(productData)
                     .eq("id", editingId);
 
-                console.log("EDITING ID:", editingId);
-                console.log("SENDING DATA:", productData);
-                console.log("UPDATE ERROR:", error);
-
-                if (error) {
-                    console.error("UPDATE ERROR:", error);
-                    alert(`Product update nahi hua ❌\n\n${error.message}`);
-                    return;
-                }
-
-                alert("Product updated successfully ✅");
-            }
-
-            // ================= ADD =================
-
-            else {
-                const { data, error } = await supabase
+                error = result.error;
+            } else {
+                const result = await supabase
                     .from("products")
-                    .insert([productData])
-                    .select();
+                    .insert([productData]);
 
-                console.log("INSERTED DATA:", data);
-                console.log("INSERT ERROR:", error);
-
-                if (error) {
-                    console.error("INSERT ERROR:", error);
-
-                    alert(
-                        `Product add nahi hua ❌\n\n${error.message}`
-                    );
-
-                    return;
-                }
-
-                alert("Product added successfully 🎉");
+                error = result.error;
             }
 
-            resetForm();
-
-            await fetchProducts();
-
-        } catch (error) {
-            console.error("PRODUCT ERROR:", error);
+            if (error) {
+                console.error("PRODUCT SAVE ERROR:", error);
+                alert(`Product save nahi hua ❌\n\n${error.message}`);
+                return;
+            }
 
             alert(
-                `Something went wrong ❌\n\n${error.message}`
+                editingId
+                    ? "Product updated successfully ✅"
+                    : "Product added successfully ✅"
             );
 
+            resetForm();
+            await fetchProducts();
+        } catch (error) {
+            console.error("PRODUCT SAVE ERROR:", error);
+            alert(`Something went wrong ❌\n\n${error.message}`);
         } finally {
             setSaving(false);
         }
     };
 
-
-
-    // ================= BULK CSV UPLOAD =================
-
-    const handleBulkUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setBulkUploading(true);
-
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            transformHeader: (header) => header.trim().replace(/^\uFEFF/, ""),
-            complete: async (results) => {
-                try {
-                    const rows = results.data;
-
-                    if (rows.length === 0) {
-                        alert("CSV khaali hai ❌");
-                        setBulkUploading(false);
-                        return;
-                    }
-
-                    const productsToInsert = rows.map((row) => {
-                        const cleanOfferPrice = row.offer_price?.trim();
-                        const cleanIsActive = row.is_active?.trim().toLowerCase();
-
-                        return {
-                            name: row.name?.trim() || "",
-                            price: Number(row.price?.trim()) || 0,
-                            offer_price:
-                                !cleanOfferPrice ? null : Number(cleanOfferPrice),
-                            category: row.category?.trim() || "",
-                            description: row.description?.trim() || "",
-                            stock: Number(row.stock?.trim()) || 0,
-                            weight: row.weight?.trim() || null,
-                            image_url: row.image_url?.trim() || null,
-                            is_active:
-                                cleanIsActive === undefined || cleanIsActive === ""
-                                    ? true
-                                    : cleanIsActive === "true",
-                        };
-                    });
-
-                    const invalidRows = productsToInsert.filter(
-                        (p) => !p.name
-                    );
-
-                    if (invalidRows.length > 0) {
-                        alert(
-                            `${invalidRows.length} rows me "name" missing hai, unhe check karo ❌`
-                        );
-                        setBulkUploading(false);
-                        return;
-                    }
-
-                    const { data, error } = await supabase
-                        .from("products")
-                        .insert(productsToInsert)
-                        .select();
-
-                    if (error) {
-                        console.error("BULK UPLOAD ERROR:", error);
-                        alert(`Bulk upload fail hua ❌\n\n${error.message}`);
-                        setBulkUploading(false);
-                        return;
-                    }
-
-                    alert(`${data.length} products successfully add ho gaye 🎉`);
-                    await fetchProducts();
-
-                } catch (err) {
-                    console.error("BULK UPLOAD ERROR:", err);
-                    alert(`Kuch galat hua ❌\n\n${err.message}`);
-                } finally {
-                    setBulkUploading(false);
-                    e.target.value = "";
-                }
-            },
-            error: (err) => {
-                console.error("CSV PARSE ERROR:", err);
-                alert("CSV parse nahi hui ❌");
-                setBulkUploading(false);
-            },
-        });
-    };
-
-    // ================= EDIT =================
+    // ======================================================
+    // EDIT PRODUCT
+    // ======================================================
 
     const handleEdit = (product) => {
-        console.log("EDIT PRODUCT:", product);
-        console.log("EDIT PRODUCT ID:", product.id);
-
         setEditingId(product.id);
 
         setForm({
@@ -368,120 +324,890 @@ function AdminDashboard() {
         });
     };
 
-
+    // ======================================================
+    // TOGGLE PRODUCT ACTIVE
+    // ======================================================
 
     const handleToggleActive = async (product) => {
-        const newStatus = !product.is_active;
+        try {
+            const { error } = await supabase
+                .from("products")
+                .update({
+                    is_active: !product.is_active,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", product.id);
 
-        const { error } = await supabase
-            .from("products")
-            .update({
-                is_active: newStatus,
-                updated_at: new Date().toISOString(),
-            })
-            .eq("id", product.id);
+            if (error) {
+                console.error("TOGGLE ERROR:", error);
+                alert(`Status change nahi hua ❌\n\n${error.message}`);
+                return;
+            }
 
-        if (error) {
-            console.error("STATUS UPDATE ERROR:", error);
-            alert("Product status change nahi hua ❌");
-            return;
+            await fetchProducts();
+        } catch (error) {
+            console.error("TOGGLE ERROR:", error);
         }
-
-        // Screen par turant update
-        setProducts((prev) =>
-            prev.map((item) =>
-                item.id === product.id
-                    ? { ...item, is_active: newStatus }
-                    : item
-            )
-        );
     };
 
-    // ================= DELETE =================
+    // ======================================================
+    // SINGLE DELETE
+    // ======================================================
 
     const handleDelete = async (id) => {
-        const confirmDelete = window.confirm(
-            "Kya tum is product ko permanently delete karna chahte ho?"
+        const confirmed = window.confirm(
+            "Ye product permanently delete karna hai?"
         );
 
-        if (!confirmDelete) return;
+        if (!confirmed) return;
 
-        const { error } = await supabase
-            .from("products")
-            .delete()
-            .eq("id", id);
+        try {
+            setSaving(true);
 
-        if (error) {
+            const { error } = await supabase
+                .from("products")
+                .delete()
+                .eq("id", id);
+
+            if (error) {
+                console.error("DELETE ERROR:", error);
+                alert(`Delete nahi hua ❌\n\n${error.message}`);
+                return;
+            }
+
+            setSelectedProducts((prev) =>
+                prev.filter((item) => String(item) !== String(id))
+            );
+
+            if (
+                editingId &&
+                String(editingId) === String(id)
+            ) {
+                resetForm();
+            }
+
+            await fetchProducts();
+
+            alert("Product deleted successfully 🗑️");
+        } catch (error) {
             console.error("DELETE ERROR:", error);
-            alert("Product delete nahi hua ❌");
+            alert(`Something went wrong ❌\n\n${error.message}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ======================================================
+    // SELECT PRODUCT
+    // ======================================================
+
+    const handleSelectProduct = (id) => {
+        setSelectedProducts((prev) => {
+            const alreadySelected = prev.some(
+                (item) => String(item) === String(id)
+            );
+
+            if (alreadySelected) {
+                return prev.filter(
+                    (item) => String(item) !== String(id)
+                );
+            }
+
+            if (prev.length >= MAX_BULK_DELETE) {
+                alert(
+                    "Ek baar me maximum 50 products select kar sakte ho ❌"
+                );
+
+                return prev;
+            }
+
+            return [...prev, id];
+        });
+    };
+
+    // ======================================================
+    // SELECT ALL VISIBLE - MAX 50
+    // ======================================================
+
+    const handleSelectAllProducts = () => {
+        const visibleIds = filteredProducts
+            .map((product) => product.id);
+
+        const allVisibleSelected =
+            visibleIds.length > 0 &&
+            visibleIds.every((id) =>
+                selectedProducts.some(
+                    (selectedId) =>
+                        String(selectedId) === String(id)
+                )
+            );
+
+        if (allVisibleSelected) {
+            setSelectedProducts((prev) =>
+                prev.filter(
+                    (id) =>
+                        !visibleIds.some(
+                            (visibleId) =>
+                                String(visibleId) === String(id)
+                        )
+                )
+            );
+
             return;
         }
 
-        alert("Product deleted successfully 🗑️");
+        const currentSelected = [...selectedProducts];
 
-        if (editingId === id) {
-            resetForm();
+        const availableSlots =
+            MAX_BULK_DELETE - currentSelected.length;
+
+        if (availableSlots <= 0) {
+            alert(
+                "Maximum 50 products already selected ❌"
+            );
+            return;
         }
 
-        fetchProducts();
+        const idsToAdd = visibleIds
+            .filter(
+                (id) =>
+                    !currentSelected.some(
+                        (selectedId) =>
+                            String(selectedId) === String(id)
+                    )
+            )
+            .slice(0, availableSlots);
+
+        setSelectedProducts([
+            ...currentSelected,
+            ...idsToAdd,
+        ]);
+
+        const remainingUnselected = visibleIds.filter(
+            (id) =>
+                !currentSelected.some(
+                    (selectedId) =>
+                        String(selectedId) === String(id)
+                )
+        );
+
+        if (idsToAdd.length < remainingUnselected.length) {
+            alert(
+                "Maximum 50 products hi select ho sakte hain ❌"
+            );
+        }
     };
 
-    // ================= UI =================
+    // ======================================================
+    // BULK DELETE 50 PRODUCTS
+    // ======================================================
+
+    const handleBulkDelete = async () => {
+        if (selectedProducts.length === 0) {
+            alert("Pehle products select karo ❌");
+            return;
+        }
+
+        if (selectedProducts.length > MAX_BULK_DELETE) {
+            alert(
+                "Maximum 50 products hi delete kar sakte ho ❌"
+            );
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `${selectedProducts.length} products permanently delete karne hain?\n\nYe action undo nahi kiya ja sakta.`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setSaving(true);
+
+            const { error } = await supabase
+                .from("products")
+                .delete()
+                .in("id", selectedProducts);
+
+            if (error) {
+                console.error(
+                    "BULK DELETE ERROR:",
+                    error
+                );
+
+                alert(
+                    `Bulk delete fail hua ❌\n\n${error.message}`
+                );
+
+                return;
+            }
+
+            const deletedCount = selectedProducts.length;
+
+            setSelectedProducts([]);
+
+            if (
+                editingId &&
+                selectedProducts.some(
+                    (id) =>
+                        String(id) === String(editingId)
+                )
+            ) {
+                resetForm();
+            }
+
+            await fetchProducts();
+
+            alert(
+                `${deletedCount} products successfully deleted 🗑️`
+            );
+        } catch (error) {
+            console.error(
+                "BULK DELETE ERROR:",
+                error
+            );
+
+            alert(
+                `Something went wrong ❌\n\n${error.message}`
+            );
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ======================================================
+    // CSV BULK UPLOAD
+    // ======================================================
+
+    const handleCSVUpload = (e) => {
+        const file = e.target.files?.[0];
+
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+
+            complete: async (results) => {
+                try {
+                    if (!results.data?.length) {
+                        alert("CSV empty hai ❌");
+                        return;
+                    }
+
+                    setBulkUploading(true);
+
+                    const rows = results.data
+                        .map((row) => {
+                            const name =
+                                row.name?.trim();
+
+                            if (!name) return null;
+
+                            const price =
+                                Number(row.price);
+
+                            const offerPrice =
+                                row.offer_price === "" ||
+                                    row.offer_price == null
+                                    ? null
+                                    : Number(
+                                        row.offer_price
+                                    );
+
+                            const stock =
+                                row.stock === "" ||
+                                    row.stock == null
+                                    ? 0
+                                    : Number(row.stock);
+
+                            return {
+                                name,
+
+                                price:
+                                    Number.isFinite(price)
+                                        ? price
+                                        : 0,
+
+                                offer_price:
+                                    offerPrice !== null &&
+                                        Number.isFinite(
+                                            offerPrice
+                                        )
+                                        ? offerPrice
+                                        : null,
+
+                                category:
+                                    row.category?.trim() ||
+                                    null,
+
+                                description:
+                                    row.description?.trim() ||
+                                    null,
+
+                                stock:
+                                    Number.isFinite(stock)
+                                        ? stock
+                                        : 0,
+
+                                weight:
+                                    row.weight?.trim() ||
+                                    null,
+
+                                image_url:
+                                    row.image_url?.trim() ||
+                                    null,
+
+                                is_active:
+                                    String(
+                                        row.is_active ?? "true"
+                                    ).toLowerCase() !==
+                                    "false",
+                            };
+                        })
+                        .filter(Boolean);
+
+                    if (!rows.length) {
+                        alert(
+                            "CSV me valid products nahi mile ❌"
+                        );
+                        return;
+                    }
+
+                    const { error } = await supabase
+                        .from("products")
+                        .insert(rows);
+
+                    if (error) {
+                        console.error(
+                            "CSV UPLOAD ERROR:",
+                            error
+                        );
+
+                        alert(
+                            `CSV upload fail hua ❌\n\n${error.message}`
+                        );
+
+                        return;
+                    }
+
+                    alert(
+                        `${rows.length} products successfully uploaded ✅`
+                    );
+
+                    await fetchProducts();
+                } catch (error) {
+                    console.error(
+                        "CSV ERROR:",
+                        error
+                    );
+
+                    alert(
+                        `CSV upload error ❌\n\n${error.message}`
+                    );
+                } finally {
+                    setBulkUploading(false);
+
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                    }
+                }
+            },
+
+            error: (error) => {
+                console.error("CSV PARSE ERROR:", error);
+
+                alert(
+                    `CSV read nahi hua ❌\n\n${error.message}`
+                );
+
+                setBulkUploading(false);
+            },
+        });
+    };
+
+    // ======================================================
+    // FETCH BANNERS
+    // ======================================================
+
+    const fetchBanners = async () => {
+        try {
+            setBannerLoading(true);
+
+            const { data, error } = await supabase
+                .from("banners")
+                .select("*")
+                .order("sort_order", {
+                    ascending: true,
+                })
+                .order("created_at", {
+                    ascending: false,
+                });
+
+            if (error) {
+                console.error(
+                    "BANNER FETCH ERROR:",
+                    error
+                );
+
+                alert(
+                    `Banners load nahi hue ❌\n\n${error.message}`
+                );
+
+                return;
+            }
+
+            setBanners(data || []);
+        } catch (error) {
+            console.error(
+                "BANNER FETCH ERROR:",
+                error
+            );
+        } finally {
+            setBannerLoading(false);
+        }
+    };
+
+    // ======================================================
+    // BANNER FORM CHANGE
+    // ======================================================
+
+    const handleBannerChange = (e) => {
+        const { name, value, type, checked } = e.target;
+
+        setBannerForm((prev) => ({
+            ...prev,
+            [name]:
+                type === "checkbox"
+                    ? checked
+                    : value,
+        }));
+    };
+
+    // ======================================================
+    // BANNER FILE CHANGE
+    // ======================================================
+
+    const handleBannerFileChange = (e) => {
+        const file = e.target.files?.[0];
+
+        if (!file) {
+            setBannerFile(null);
+            setBannerPreview("");
+            return;
+        }
+
+        if (!file.type.startsWith("image/")) {
+            alert(
+                "Sirf image file select karo ❌"
+            );
+
+            e.target.value = "";
+            setBannerFile(null);
+            setBannerPreview("");
+
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert(
+                "Banner image 5MB se chhoti honi chahiye ❌"
+            );
+
+            e.target.value = "";
+            setBannerFile(null);
+            setBannerPreview("");
+
+            return;
+        }
+
+        setBannerFile(file);
+
+        const previewUrl =
+            URL.createObjectURL(file);
+
+        setBannerPreview(previewUrl);
+    };
+
+    // ======================================================
+    // UPLOAD BANNER IMAGE TO SUPABASE STORAGE
+    // ======================================================
+
+    const uploadBannerImage = async (file) => {
+        if (!file) return null;
+
+        const fileExt =
+            file.name
+                .split(".")
+                .pop()
+                ?.toLowerCase() || "jpg";
+
+        const randomPart =
+            Math.random()
+                .toString(36)
+                .substring(2, 9);
+
+        const fileName =
+            `banner-${Date.now()}-${randomPart}.${fileExt}`;
+
+        const { error: uploadError } =
+            await supabase.storage
+                .from("banners")
+                .upload(
+                    fileName,
+                    file,
+                    {
+                        cacheControl: "3600",
+                        upsert: false,
+                        contentType: file.type,
+                    }
+                );
+
+        if (uploadError) {
+            throw uploadError;
+        }
+
+        const {
+            data: publicUrlData,
+        } = supabase.storage
+            .from("banners")
+            .getPublicUrl(fileName);
+
+        return publicUrlData?.publicUrl || null;
+    };
+
+    // ======================================================
+    // RESET BANNER
+    // ======================================================
+
+    const resetBannerForm = () => {
+        setBannerForm({
+            image_url: "",
+            link_url: "",
+            sort_order: 0,
+            is_active: true,
+        });
+
+        setBannerFile(null);
+        setBannerPreview("");
+        setEditingBannerId(null);
+
+        if (bannerFileInputRef.current) {
+            bannerFileInputRef.current.value = "";
+        }
+    };
+
+    // ======================================================
+    // ADD / UPDATE BANNER
+    // ======================================================
+
+    const handleBannerSubmit = async (e) => {
+        e.preventDefault();
+
+        if (
+            !bannerFile &&
+            !bannerForm.image_url.trim()
+        ) {
+            alert(
+                "Gallery se banner select karo ya Image URL enter karo ❌"
+            );
+
+            return;
+        }
+
+        try {
+            setBannerSaving(true);
+
+            let finalImageUrl =
+                bannerForm.image_url.trim();
+
+            // Gallery image gets priority
+            if (bannerFile) {
+                finalImageUrl =
+                    await uploadBannerImage(
+                        bannerFile
+                    );
+            }
+
+            if (!finalImageUrl) {
+                alert(
+                    "Banner image nahi mili ❌"
+                );
+
+                return;
+            }
+
+            const bannerData = {
+                image_url: finalImageUrl,
+
+                link_url:
+                    bannerForm.link_url.trim() ||
+                    null,
+
+                sort_order:
+                    Number(
+                        bannerForm.sort_order
+                    ) || 0,
+
+                is_active:
+                    bannerForm.is_active,
+
+                updated_at:
+                    new Date().toISOString(),
+            };
+
+            let error;
+
+            if (editingBannerId) {
+                const result = await supabase
+                    .from("banners")
+                    .update(bannerData)
+                    .eq(
+                        "id",
+                        editingBannerId
+                    );
+
+                error = result.error;
+            } else {
+                const result = await supabase
+                    .from("banners")
+                    .insert([
+                        bannerData,
+                    ]);
+
+                error = result.error;
+            }
+
+            if (error) {
+                console.error(
+                    "BANNER SAVE ERROR:",
+                    error
+                );
+
+                alert(
+                    `Banner save nahi hua ❌\n\n${error.message}`
+                );
+
+                return;
+            }
+
+            alert(
+                editingBannerId
+                    ? "Banner updated successfully ✅"
+                    : "Banner added successfully ✅"
+            );
+
+            resetBannerForm();
+            await fetchBanners();
+        } catch (error) {
+            console.error(
+                "BANNER SAVE ERROR:",
+                error
+            );
+
+            alert(
+                `Banner save error ❌\n\n${error.message}`
+            );
+        } finally {
+            setBannerSaving(false);
+        }
+    };
+
+    // ======================================================
+    // EDIT BANNER
+    // ======================================================
+
+    const handleEditBanner = (banner) => {
+        setEditingBannerId(banner.id);
+
+        setBannerForm({
+            image_url:
+                banner.image_url || "",
+
+            link_url:
+                banner.link_url || "",
+
+            sort_order:
+                banner.sort_order ?? 0,
+
+            is_active:
+                banner.is_active ?? true,
+        });
+
+        setBannerFile(null);
+        setBannerPreview("");
+
+        if (bannerFileInputRef.current) {
+            bannerFileInputRef.current.value = "";
+        }
+
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth",
+        });
+    };
+
+    // ======================================================
+    // DELETE BANNER
+    // ======================================================
+
+    const handleDeleteBanner = async (id) => {
+        const confirmed = window.confirm(
+            "Ye banner permanently delete karna hai?"
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const { error } = await supabase
+                .from("banners")
+                .delete()
+                .eq("id", id);
+
+            if (error) {
+                console.error(
+                    "BANNER DELETE ERROR:",
+                    error
+                );
+
+                alert(
+                    `Banner delete nahi hua ❌\n\n${error.message}`
+                );
+
+                return;
+            }
+
+            if (
+                String(editingBannerId) ===
+                String(id)
+            ) {
+                resetBannerForm();
+            }
+
+            await fetchBanners();
+
+            alert(
+                "Banner deleted successfully 🗑️"
+            );
+        } catch (error) {
+            console.error(
+                "BANNER DELETE ERROR:",
+                error
+            );
+
+            alert(
+                `Something went wrong ❌\n\n${error.message}`
+            );
+        }
+    };
+
+    // ======================================================
+    // TOGGLE BANNER
+    // ======================================================
+
+    const handleToggleBanner = async (banner) => {
+        try {
+            const { error } = await supabase
+                .from("banners")
+                .update({
+                    is_active:
+                        !banner.is_active,
+
+                    updated_at:
+                        new Date().toISOString(),
+                })
+                .eq(
+                    "id",
+                    banner.id
+                );
+
+            if (error) {
+                console.error(
+                    "BANNER TOGGLE ERROR:",
+                    error
+                );
+
+                alert(
+                    `Banner status change nahi hua ❌\n\n${error.message}`
+                );
+
+                return;
+            }
+
+            await fetchBanners();
+        } catch (error) {
+            console.error(
+                "BANNER TOGGLE ERROR:",
+                error
+            );
+        }
+    };
+
+    // ======================================================
+    // STATS
+    // ======================================================
+
+    const totalProducts = products.length;
+
+    const activeProducts = products.filter(
+        (product) => product.is_active
+    ).length;
+
+    const outOfStock = products.filter(
+        (product) =>
+            Number(product.stock) <= 0
+    ).length;
+
+    const activeBanners = banners.filter(
+        (banner) => banner.is_active
+    ).length;
+
+    // ======================================================
+    // UI
+    // ======================================================
 
     return (
-        <main className="min-h-screen bg-gray-100 px-4 py-6 sm:px-6 lg:px-10">
+        <div className="min-h-screen bg-gray-100">
 
-            <div className="max-w-7xl mx-auto">
+            {/* ==================================================
+                HEADER
+            ================================================== */}
 
-                {/* ================= HEADER ================= */}
+            <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
 
-                <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-6 mb-6">
+                <div className="max-w-[1800px] mx-auto px-4 py-3">
 
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
 
                         <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
-                                Admin Dashboard 🛠️
+                            <h1 className="text-xl font-black text-gray-900">
+                                Apna Mart Admin
                             </h1>
 
-                            <p className="text-gray-500 mt-1">
-                                Manage Apna Mart Products
+                            <p className="text-xs text-gray-500">
+                                Products, banners & store management
                             </p>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex flex-wrap gap-2">
 
-                            <div>
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
-                                    Admin Dashboard 🛠️
-                                </h1>
+                            <button
+                                onClick={() =>
+                                    navigate("/admin/orders")
+                                }
+                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold"
+                            >
+                                📦 Orders
+                            </button>
 
-                                <p className="text-gray-500 mt-1">
-                                    Manage Apna Mart Products
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-3">
-
-                                <label className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-semibold transition cursor-pointer text-center">
-                                    {bulkUploading ? "Uploading..." : "📤 Bulk Upload CSV"}
-                                    <input
-                                        type="file"
-                                        accept=".csv"
-                                        onChange={handleBulkUpload}
-                                        disabled={bulkUploading}
-                                        className="hidden"
-                                    />
-                                </label>
-
-                                <button
-                                    onClick={() => navigate("/admin/orders")}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold transition"
-                                >
-                                    📦 Manage Orders
-                                </button>
-
-                            </div>
+                            <button
+                                onClick={() =>
+                                    navigate("/")
+                                }
+                                className="px-3 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-xs font-bold"
+                            >
+                                🏪 View Store
+                            </button>
 
                         </div>
 
@@ -489,267 +1215,307 @@ function AdminDashboard() {
 
                 </div>
 
-                {/* ================= PRODUCT FORM ================= */}
+            </header>
 
-                <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-7 mb-8">
+            <main className="max-w-[1800px] mx-auto px-3 sm:px-4 py-4">
 
-                    <div className="flex items-center justify-between mb-6">
+                {/* ==================================================
+                    QUICK STATS
+                ================================================== */}
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
+
+                    <div className="bg-white rounded-xl border border-gray-200 p-3">
+                        <p className="text-[11px] text-gray-500">
+                            Total Products
+                        </p>
+
+                        <p className="text-xl font-black text-gray-900">
+                            {totalProducts}
+                        </p>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 p-3">
+                        <p className="text-[11px] text-gray-500">
+                            Active Products
+                        </p>
+
+                        <p className="text-xl font-black text-green-600">
+                            {activeProducts}
+                        </p>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 p-3">
+                        <p className="text-[11px] text-gray-500">
+                            Out of Stock
+                        </p>
+
+                        <p className="text-xl font-black text-red-600">
+                            {outOfStock}
+                        </p>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 p-3">
+                        <p className="text-[11px] text-gray-500">
+                            Active Banners
+                        </p>
+
+                        <p className="text-xl font-black text-blue-600">
+                            {activeBanners}
+                        </p>
+                    </div>
+
+                </div>
+
+                {/* ==================================================
+                    PRODUCT FORM
+                ================================================== */}
+
+                <section className="bg-white rounded-xl border border-gray-200 mb-4">
+
+                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
 
                         <div>
-                            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
+                            <h2 className="text-sm font-black text-gray-900">
                                 {editingId
                                     ? "✏️ Edit Product"
-                                    : "➕ Add New Product"}
+                                    : "➕ Add Product"}
                             </h2>
 
-                            <p className="text-gray-500 text-sm mt-1">
-                                Product information enter karo
+                            <p className="text-[11px] text-gray-500">
+                                Product information
                             </p>
                         </div>
 
                         {editingId && (
                             <button
-                                type="button"
                                 onClick={resetForm}
-                                className="text-red-500 font-semibold hover:underline"
+                                className="text-xs font-bold text-gray-600 hover:text-red-600"
                             >
-                                Cancel
+                                ✕ Cancel Edit
                             </button>
                         )}
 
                     </div>
 
-                    <form onSubmit={handleSubmit}>
+                    <form
+                        onSubmit={
+                            handleProductSubmit
+                        }
+                        className="p-4"
+                    >
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2.5">
 
-                            {/* PRODUCT NAME */}
-
-                            <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
-                                    Product Name
+                            <div className="xl:col-span-2">
+                                <label className="admin-label">
+                                    Product Name *
                                 </label>
 
                                 <input
-                                    type="text"
                                     name="name"
                                     value={form.name}
-                                    onChange={handleChange}
-                                    placeholder="e.g. Tata Salt 1kg"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="Product name"
+                                    className="admin-input"
                                 />
                             </div>
 
-                            {/* CATEGORY */}
+                            <div>
+                                <label className="admin-label">
+                                    Price *
+                                </label>
+
+                                <input
+                                    name="price"
+                                    type="number"
+                                    min="0"
+                                    value={form.price}
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="₹"
+                                    className="admin-input"
+                                />
+                            </div>
 
                             <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
+                                <label className="admin-label">
+                                    Offer Price
+                                </label>
+
+                                <input
+                                    name="offer_price"
+                                    type="number"
+                                    min="0"
+                                    value={
+                                        form.offer_price
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="₹"
+                                    className="admin-input"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="admin-label">
                                     Category
                                 </label>
 
                                 <input
-                                    type="text"
                                     name="category"
-                                    value={form.category}
-                                    onChange={handleChange}
-                                    placeholder="e.g. Grocery"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            {/* ORIGINAL PRICE */}
-
-                            <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
-                                    Original Price ₹
-                                </label>
-
-                                <input
-                                    type="number"
-                                    name="price"
-                                    value={form.price}
-                                    onChange={handleChange}
-                                    placeholder="100"
-                                    min="0"
-                                    step="0.01"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            {/* OFFER PRICE */}
-
-                            <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
-                                    Offer Price ₹
-                                </label>
-
-                                <input
-                                    type="number"
-                                    name="offer_price"
-                                    value={form.offer_price}
-                                    onChange={handleChange}
-                                    placeholder="80"
-                                    min="0"
-                                    step="0.01"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={
+                                        form.category
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="Category"
+                                    className="admin-input"
+                                    list="product-categories"
                                 />
 
-                                {form.price &&
-                                    form.offer_price &&
-                                    Number(form.offer_price) <
-                                    Number(form.price) && (
-                                        <p className="text-green-600 text-sm mt-2 font-semibold">
-                                            🎉{" "}
-                                            {getDiscount(
-                                                form.price,
-                                                form.offer_price
-                                            )}
-                                            % OFF
-                                        </p>
+                                <datalist id="product-categories">
+                                    {categories.map(
+                                        (category) => (
+                                            <option
+                                                key={
+                                                    category
+                                                }
+                                                value={
+                                                    category
+                                                }
+                                            />
+                                        )
                                     )}
+                                </datalist>
                             </div>
 
-                            {/* STOCK */}
-
                             <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
-                                    Stock
+                                <label className="admin-label">
+                                    Stock *
                                 </label>
 
                                 <input
-                                    type="number"
                                     name="stock"
-                                    value={form.stock}
-                                    onChange={handleChange}
-                                    placeholder="50"
+                                    type="number"
                                     min="0"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={
+                                        form.stock
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="0"
+                                    className="admin-input"
                                 />
                             </div>
 
-
-                            {/* WEIGHT */}
-
                             <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
+                                <label className="admin-label">
                                     Weight
                                 </label>
 
                                 <input
-                                    type="text"
                                     name="weight"
-                                    value={form.weight}
-                                    onChange={handleChange}
-                                    placeholder="500g / 1kg / 1L"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={
+                                        form.weight
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="1 kg"
+                                    className="admin-input"
                                 />
                             </div>
 
-                            {/* IMAGE URL */}
-
-                            <div>
-                                <label className="block font-semibold text-gray-700 mb-2">
+                            <div className="xl:col-span-2">
+                                <label className="admin-label">
                                     Image URL
                                 </label>
 
                                 <input
-                                    type="url"
                                     name="image_url"
-                                    value={form.image_url}
-                                    onChange={handleChange}
-                                    placeholder="https://example.com/product.jpg"
-                                    className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={
+                                        form.image_url
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="https://..."
+                                    className="admin-input"
                                 />
                             </div>
 
-                        </div>
+                            <div className="sm:col-span-2 lg:col-span-2 xl:col-span-3">
+                                <label className="admin-label">
+                                    Description
+                                </label>
 
-                        {/* IMAGE PREVIEW */}
+                                <input
+                                    name="description"
+                                    value={
+                                        form.description
+                                    }
+                                    onChange={
+                                        handleProductChange
+                                    }
+                                    placeholder="Short description"
+                                    className="admin-input"
+                                />
+                            </div>
 
-                        {form.image_url && (
-                            <div className="mt-5">
+                            <div className="flex items-end">
 
-                                <p className="font-semibold text-gray-700 mb-2">
-                                    Image Preview
-                                </p>
+                                <label className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 w-full cursor-pointer h-[38px]">
 
-                                <div className="w-32 h-32 border rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center">
-
-                                    <img
-                                        src={form.image_url}
-                                        alt="Preview"
-                                        className="w-full h-full object-contain"
-                                        onError={(e) => {
-                                            e.currentTarget.style.display =
-                                                "none";
-                                        }}
+                                    <input
+                                        type="checkbox"
+                                        name="is_active"
+                                        checked={
+                                            form.is_active
+                                        }
+                                        onChange={
+                                            handleProductChange
+                                        }
+                                        className="accent-green-600"
                                     />
 
-                                </div>
+                                    <span className="text-xs font-bold">
+                                        Active
+                                    </span>
+
+                                </label>
 
                             </div>
-                        )}
-
-                        {/* DESCRIPTION */}
-
-                        <div className="mt-5">
-
-                            <label className="block font-semibold text-gray-700 mb-2">
-                                Description
-                            </label>
-
-                            <textarea
-                                name="description"
-                                value={form.description}
-                                onChange={handleChange}
-                                rows="4"
-                                placeholder="Product ke baare me details..."
-                                className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                            />
 
                         </div>
 
-                        {/* ACTIVE */}
-
-                        <div className="flex items-center gap-3 mt-5">
-
-                            <input
-                                type="checkbox"
-                                name="is_active"
-                                checked={form.is_active}
-                                onChange={handleChange}
-                                className="w-5 h-5 accent-blue-600"
-                            />
-
-                            <label className="font-semibold text-gray-700">
-                                Show product on website
-                            </label>
-
-                        </div>
-
-                        {/* FORM BUTTONS */}
-
-                        <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                        <div className="flex flex-wrap gap-2 mt-3">
 
                             <button
                                 type="submit"
                                 disabled={saving}
-                                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition"
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-black"
                             >
                                 {saving
                                     ? "Saving..."
                                     : editingId
-                                        ? "Update Product"
-                                        : "Add Product"}
+                                        ? "💾 Update Product"
+                                        : "➕ Add Product"}
                             </button>
 
                             {editingId && (
                                 <button
                                     type="button"
                                     onClick={resetForm}
-                                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-xl font-bold transition"
+                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs font-bold"
                                 >
-                                    Cancel Edit
+                                    Cancel
                                 </button>
                             )}
 
@@ -757,216 +1523,862 @@ function AdminDashboard() {
 
                     </form>
 
-                </div>
+                </section>
 
-                {/* ================= ALL PRODUCTS ================= */}
+                {/* ==================================================
+                    CSV UPLOAD
+                ================================================== */}
 
-                <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-7">
+                <section className="bg-white rounded-xl border border-gray-200 p-3 mb-4">
 
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 
                         <div>
-                            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-                                All Products
+                            <h2 className="text-sm font-black">
+                                📄 Bulk CSV Upload
                             </h2>
 
-                            <p className="text-gray-500 mt-1">
-                                Total Products: {products.length}
+                            <p className="text-[10px] text-gray-500 mt-0.5">
+                                Columns: name, price, offer_price, category,
+                                description, stock, weight, image_url, is_active
                             </p>
                         </div>
 
                         <button
-                            onClick={fetchProducts}
-                            className="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-xl font-semibold"
+                            type="button"
+                            onClick={() =>
+                                fileInputRef.current?.click()
+                            }
+                            disabled={
+                                bulkUploading
+                            }
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold"
                         >
-                            🔄 Refresh
+                            {bulkUploading
+                                ? "Uploading..."
+                                : "📤 Upload CSV"}
                         </button>
+
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv,text/csv"
+                            onChange={
+                                handleCSVUpload
+                            }
+                            className="hidden"
+                        />
 
                     </div>
 
-                    {loading ? (
-                        <div className="text-center py-12 text-gray-500">
-                            Loading products...
+                </section>
+
+                {/* ==================================================
+                    BANNER MANAGEMENT
+                ================================================== */}
+
+                <section className="bg-white rounded-xl border border-gray-200 mb-4">
+
+                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+
+                        <div>
+                            <h2 className="text-sm font-black">
+                                🖼️ Banner Management
+                            </h2>
+
+                            <p className="text-[11px] text-gray-500">
+                                Gallery image ya Image URL use kar sakte ho
+                            </p>
                         </div>
-                    ) : products.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <p className="text-5xl mb-3">📦</p>
-                            <p>No products found.</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
 
-                            {products.map((product) => {
+                        {editingBannerId && (
+                            <button
+                                onClick={
+                                    resetBannerForm
+                                }
+                                className="text-xs font-bold text-gray-600 hover:text-red-600"
+                            >
+                                ✕ Cancel Edit
+                            </button>
+                        )}
 
-                                const discount = getDiscount(
-                                    product.price,
-                                    product.offer_price
-                                );
+                    </div>
 
-                                return (
-                                    <div
-                                        key={product.id}
-                                        className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition"
-                                    >
+                    <form
+                        onSubmit={
+                            handleBannerSubmit
+                        }
+                        className="p-4"
+                    >
 
-                                        {/* PRODUCT IMAGE */}
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
 
-                                        <div className="h-48 bg-gray-100 flex items-center justify-center">
+                            {/* GALLERY */}
 
-                                            {product.image_url ? (
+                            <div className="lg:col-span-2">
+
+                                <label className="admin-label">
+                                    Banner Image
+                                </label>
+
+                                <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
+
+                                    <input
+                                        ref={
+                                            bannerFileInputRef
+                                        }
+                                        id="banner-file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={
+                                            handleBannerFileChange
+                                        }
+                                        className="block w-full text-xs"
+                                    />
+
+                                    <p className="text-[10px] text-gray-500 mt-2">
+                                        Maximum 5MB • JPG, PNG, WEBP etc.
+                                    </p>
+
+                                    {(bannerPreview ||
+                                        bannerForm.image_url) && (
+                                            <div className="mt-3">
+
                                                 <img
-                                                    src={product.image_url}
-                                                    alt={product.name}
-                                                    className="w-full h-full object-contain"
+                                                    src={
+                                                        bannerPreview ||
+                                                        bannerForm.image_url
+                                                    }
+                                                    alt="Banner Preview"
+                                                    className="w-full h-32 object-cover rounded-lg border"
                                                 />
-                                            ) : (
-                                                <span className="text-5xl">
-                                                    🛒
-                                                </span>
-                                            )}
 
-                                        </div>
+                                            </div>
+                                        )}
 
-                                        {/* PRODUCT CONTENT */}
+                                </div>
 
-                                        <div className="p-5">
+                            </div>
 
-                                            <div className="flex items-start justify-between gap-3">
+                            {/* URL */}
 
-                                                <h3 className="font-bold text-lg text-gray-800">
-                                                    {product.name}
-                                                </h3>
+                            <div>
+
+                                <label className="admin-label">
+                                    Image URL
+                                </label>
+
+                                <input
+                                    name="image_url"
+                                    value={
+                                        bannerForm.image_url
+                                    }
+                                    onChange={
+                                        handleBannerChange
+                                    }
+                                    placeholder="https://..."
+                                    className="admin-input"
+                                />
+
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Gallery select karoge to gallery image priority hogi.
+                                </p>
+
+                            </div>
+
+                            {/* LINK */}
+
+                            <div>
+
+                                <label className="admin-label">
+                                    Banner Link
+                                </label>
+
+                                <input
+                                    name="link_url"
+                                    value={
+                                        bannerForm.link_url
+                                    }
+                                    onChange={
+                                        handleBannerChange
+                                    }
+                                    placeholder="/products?category=..."
+                                    className="admin-input"
+                                />
+
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Optional
+                                </p>
+
+                            </div>
+
+                            {/* SORT */}
+
+                            <div>
+
+                                <label className="admin-label">
+                                    Sort Order
+                                </label>
+
+                                <input
+                                    name="sort_order"
+                                    type="number"
+                                    value={
+                                        bannerForm.sort_order
+                                    }
+                                    onChange={
+                                        handleBannerChange
+                                    }
+                                    className="admin-input"
+                                />
+
+                            </div>
+
+                            {/* ACTIVE */}
+
+                            <div className="flex items-end">
+
+                                <label className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 w-full cursor-pointer h-[38px]">
+
+                                    <input
+                                        type="checkbox"
+                                        name="is_active"
+                                        checked={
+                                            bannerForm.is_active
+                                        }
+                                        onChange={
+                                            handleBannerChange
+                                        }
+                                        className="accent-green-600"
+                                    />
+
+                                    <span className="text-xs font-bold">
+                                        Active Banner
+                                    </span>
+
+                                </label>
+
+                            </div>
+
+                        </div>
+
+                        <div className="flex gap-2 mt-3">
+
+                            <button
+                                type="submit"
+                                disabled={
+                                    bannerSaving
+                                }
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-black"
+                            >
+                                {bannerSaving
+                                    ? "Saving..."
+                                    : editingBannerId
+                                        ? "💾 Update Banner"
+                                        : "➕ Add Banner"}
+                            </button>
+
+                            {editingBannerId && (
+                                <button
+                                    type="button"
+                                    onClick={
+                                        resetBannerForm
+                                    }
+                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+
+                        </div>
+
+                    </form>
+
+                    {/* EXISTING BANNERS */}
+
+                    <div className="border-t border-gray-200 p-4">
+
+                        <div className="flex items-center justify-between mb-3">
+
+                            <h3 className="text-xs font-black">
+                                Existing Banners
+                            </h3>
+
+                            <span className="text-[10px] text-gray-500">
+                                {banners.length} banners
+                            </span>
+
+                        </div>
+
+                        {bannerLoading ? (
+                            <div className="text-xs text-gray-500 py-5 text-center">
+                                Loading banners...
+                            </div>
+                        ) : banners.length === 0 ? (
+                            <div className="text-xs text-gray-500 py-5 text-center border border-dashed rounded-lg">
+                                No banners added yet.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+
+                                {banners.map(
+                                    (banner) => (
+                                        <div
+                                            key={
+                                                banner.id
+                                            }
+                                            className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50"
+                                        >
+
+                                            <div className="relative h-28">
+
+                                                <img
+                                                    src={
+                                                        banner.image_url
+                                                    }
+                                                    alt="Banner"
+                                                    className="w-full h-full object-cover"
+                                                />
 
                                                 <span
-                                                    className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap ${product.is_active
-                                                            ? "bg-green-100 text-green-700"
-                                                            : "bg-red-100 text-red-700"
+                                                    className={`absolute top-2 right-2 px-2 py-1 rounded-md text-[9px] font-black ${banner.is_active
+                                                            ? "bg-green-600 text-white"
+                                                            : "bg-gray-700 text-white"
+                                                        }`}
+                                                >
+                                                    {banner.is_active
+                                                        ? "ACTIVE"
+                                                        : "OFF"}
+                                                </span>
+
+                                            </div>
+
+                                            <div className="p-2.5">
+
+                                                <div className="flex items-center justify-between mb-2">
+
+                                                    <span className="text-[10px] text-gray-500">
+                                                        Order:{" "}
+                                                        {
+                                                            banner.sort_order
+                                                        }
+                                                    </span>
+
+                                                    {banner.link_url && (
+                                                        <span className="text-[9px] text-blue-600 truncate max-w-[150px]">
+                                                            🔗 Link
+                                                        </span>
+                                                    )}
+
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-1.5">
+
+                                                    <button
+                                                        onClick={() =>
+                                                            handleEditBanner(
+                                                                banner
+                                                            )
+                                                        }
+                                                        className="bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md py-1.5 text-[10px] font-bold"
+                                                    >
+                                                        ✏️ Edit
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() =>
+                                                            handleToggleBanner(
+                                                                banner
+                                                            )
+                                                        }
+                                                        className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-md py-1.5 text-[10px] font-bold"
+                                                    >
+                                                        {banner.is_active
+                                                            ? "⏸ Off"
+                                                            : "▶ On"}
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() =>
+                                                            handleDeleteBanner(
+                                                                banner.id
+                                                            )
+                                                        }
+                                                        className="bg-red-100 text-red-700 hover:bg-red-200 rounded-md py-1.5 text-[10px] font-bold"
+                                                    >
+                                                        🗑️
+                                                    </button>
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+                                    )
+                                )}
+
+                            </div>
+                        )}
+
+                    </div>
+
+                </section>
+
+                {/* ==================================================
+                    PRODUCTS
+                ================================================== */}
+
+                <section className="bg-white rounded-xl border border-gray-200">
+
+                    {/* PRODUCTS HEADER */}
+
+                    <div className="p-3 border-b border-gray-200">
+
+                        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+
+                            <div>
+                                <h2 className="text-sm font-black text-gray-900">
+                                    All Products
+                                </h2>
+
+                                <p className="text-[10px] text-gray-500">
+                                    Showing{" "}
+                                    {
+                                        filteredProducts.length
+                                    }{" "}
+                                    /{" "}
+                                    {
+                                        products.length
+                                    }
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+
+                                {/* SEARCH */}
+
+                                <input
+                                    type="text"
+                                    value={
+                                        productSearch
+                                    }
+                                    onChange={(e) =>
+                                        setProductSearch(
+                                            e.target.value
+                                        )
+                                    }
+                                    placeholder="🔍 Search..."
+                                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48"
+                                />
+
+                                {/* CATEGORY */}
+
+                                <select
+                                    value={
+                                        categoryFilter
+                                    }
+                                    onChange={(e) =>
+                                        setCategoryFilter(
+                                            e.target.value
+                                        )
+                                    }
+                                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs outline-none bg-white"
+                                >
+
+                                    <option value="all">
+                                        All Categories
+                                    </option>
+
+                                    {categories.map(
+                                        (category) => (
+                                            <option
+                                                key={
+                                                    category
+                                                }
+                                                value={
+                                                    category
+                                                }
+                                            >
+                                                {category}
+                                            </option>
+                                        )
+                                    )}
+
+                                </select>
+
+                                {/* SELECT ALL */}
+
+                                <button
+                                    onClick={
+                                        handleSelectAllProducts
+                                    }
+                                    disabled={
+                                        filteredProducts.length ===
+                                        0
+                                    }
+                                    className="bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap"
+                                >
+                                    ☑ Select 50
+                                </button>
+
+                                {/* DELETE */}
+
+                                <button
+                                    onClick={
+                                        handleBulkDelete
+                                    }
+                                    disabled={
+                                        selectedProducts.length ===
+                                        0 ||
+                                        saving
+                                    }
+                                    className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap"
+                                >
+                                    🗑️ Delete (
+                                    {
+                                        selectedProducts.length
+                                    }
+                                    )
+                                </button>
+
+                                {/* REFRESH */}
+
+                                <button
+                                    onClick={
+                                        fetchProducts
+                                    }
+                                    disabled={
+                                        loading
+                                    }
+                                    className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-200 px-3 py-2 rounded-lg text-xs font-bold"
+                                    title="Refresh"
+                                >
+                                    🔄
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        {/* SELECTION INFO */}
+
+                        {selectedProducts.length >
+                            0 && (
+                                <div className="mt-2 flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+
+                                    <p className="text-[10px] font-black text-red-700">
+                                        ⚠️{" "}
+                                        {
+                                            selectedProducts.length
+                                        }
+                                        /50 products selected
+                                    </p>
+
+                                    <button
+                                        onClick={() =>
+                                            setSelectedProducts(
+                                                []
+                                            )
+                                        }
+                                        className="text-[10px] font-bold text-red-600 hover:underline"
+                                    >
+                                        Clear Selection
+                                    </button>
+
+                                </div>
+                            )}
+
+                    </div>
+
+                    {/* PRODUCT LIST */}
+
+                    <div className="p-3">
+
+                        {loading ? (
+                            <div className="py-10 text-center text-xs text-gray-500">
+                                Loading products...
+                            </div>
+                        ) : filteredProducts.length ===
+                            0 ? (
+                            <div className="py-10 text-center border border-dashed border-gray-300 rounded-xl">
+
+                                <p className="text-sm font-bold text-gray-600">
+                                    No products found
+                                </p>
+
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                    Search/category filter change karke dekho.
+                                </p>
+
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5">
+
+                                {filteredProducts.map(
+                                    (product) => {
+
+                                        const isSelected =
+                                            selectedProducts.some(
+                                                (id) =>
+                                                    String(
+                                                        id
+                                                    ) ===
+                                                    String(
+                                                        product.id
+                                                    )
+                                            );
+
+                                        const displayPrice =
+                                            product.offer_price !==
+                                                null &&
+                                                product.offer_price !==
+                                                undefined &&
+                                                product.offer_price !==
+                                                ""
+                                                ? product.offer_price
+                                                : product.price;
+
+                                        return (
+                                            <div
+                                                key={
+                                                    product.id
+                                                }
+                                                className={`relative border rounded-xl overflow-hidden bg-white transition ${isSelected
+                                                        ? "border-red-500 ring-2 ring-red-100"
+                                                        : "border-gray-200 hover:shadow-md"
+                                                    }`}
+                                            >
+
+                                                {/* CHECKBOX */}
+
+                                                <div className="absolute top-1.5 left-1.5 z-20 bg-white rounded-md shadow-sm p-0.5">
+
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={
+                                                            isSelected
+                                                        }
+                                                        onChange={() =>
+                                                            handleSelectProduct(
+                                                                product.id
+                                                            )
+                                                        }
+                                                        className="w-4 h-4 cursor-pointer accent-red-600"
+                                                        title="Select product"
+                                                    />
+
+                                                </div>
+
+                                                {/* STATUS */}
+
+                                                <span
+                                                    className={`absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded text-[8px] font-black ${product.is_active
+                                                            ? "bg-green-600 text-white"
+                                                            : "bg-gray-700 text-white"
                                                         }`}
                                                 >
                                                     {product.is_active
-                                                        ? "Active"
-                                                        : "Hidden"}
+                                                        ? "ON"
+                                                        : "OFF"}
                                                 </span>
 
-                                            </div>
+                                                {/* IMAGE */}
 
-                                            <p className="text-sm text-gray-500 mt-1">
-                                                {product.category ||
-                                                    "No category"}
-                                            </p>
+                                                <div className="h-28 bg-gray-50">
 
-                                            {product.weight && (
-                                                <p className="text-sm text-gray-500 mt-1">
-                                                    ⚖️ {product.weight}
-                                                </p>
-                                            )}
+                                                    {product.image_url ? (
+                                                        <img
+                                                            src={
+                                                                product.image_url
+                                                            }
+                                                            alt={
+                                                                product.name
+                                                            }
+                                                            loading="lazy"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-2xl">
+                                                            🛒
+                                                        </div>
+                                                    )}
 
-                                            {/* PRICE */}
+                                                </div>
 
-                                            <div className="mt-4">
+                                                {/* DETAILS */}
 
-                                                {product.offer_price !== null &&
-                                                    product.offer_price <
-                                                    product.price ? (
-                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                <div className="p-2">
 
-                                                        <span className="text-xl font-bold text-green-600">
-                                                            ₹
+                                                    <h3
+                                                        className="text-[11px] font-black text-gray-800 line-clamp-2 min-h-[28px]"
+                                                        title={
+                                                            product.name
+                                                        }
+                                                    >
+                                                        {
+                                                            product.name
+                                                        }
+                                                    </h3>
+
+                                                    <div className="flex items-center justify-between gap-1 mt-1">
+
+                                                        <div className="min-w-0">
+
+                                                            <p className="text-xs font-black text-blue-600 truncate">
+                                                                ₹
+                                                                {
+                                                                    displayPrice
+                                                                }
+                                                            </p>
+
+                                                            {product.offer_price !==
+                                                                null &&
+                                                                product.offer_price !==
+                                                                undefined &&
+                                                                product.offer_price !==
+                                                                "" &&
+                                                                Number(
+                                                                    product.offer_price
+                                                                ) <
+                                                                Number(
+                                                                    product.price
+                                                                ) && (
+                                                                    <p className="text-[9px] text-gray-400 line-through">
+                                                                        ₹
+                                                                        {
+                                                                            product.price
+                                                                        }
+                                                                    </p>
+                                                                )}
+
+                                                        </div>
+
+                                                        <span
+                                                            className={`text-[9px] font-bold whitespace-nowrap ${Number(
+                                                                product.stock
+                                                            ) <=
+                                                                    0
+                                                                    ? "text-red-600"
+                                                                    : "text-gray-500"
+                                                                }`}
+                                                        >
+                                                            Stock:{" "}
                                                             {
-                                                                product.offer_price
+                                                                product.stock
                                                             }
                                                         </span>
 
-                                                        <span className="text-sm text-gray-400 line-through">
-                                                            ₹{product.price}
-                                                        </span>
+                                                    </div>
 
-                                                        {discount > 0 && (
-                                                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
-                                                                {discount}% OFF
-                                                            </span>
-                                                        )}
+                                                    {product.category && (
+                                                        <p className="text-[8px] text-gray-400 truncate mt-1">
+                                                            {
+                                                                product.category
+                                                            }
+                                                        </p>
+                                                    )}
+
+                                                    {/* ACTIONS */}
+
+                                                    <div className="grid grid-cols-3 gap-1 mt-2">
+
+                                                        <button
+                                                            onClick={() =>
+                                                                handleEdit(
+                                                                    product
+                                                                )
+                                                            }
+                                                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md py-1.5 text-[9px] font-black"
+                                                        >
+                                                            ✏️
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() =>
+                                                                handleToggleActive(
+                                                                    product
+                                                                )
+                                                            }
+                                                            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-md py-1.5 text-[9px] font-black"
+                                                        >
+                                                            {product.is_active
+                                                                ? "⏸️"
+                                                                : "▶️"}
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() =>
+                                                                handleDelete(
+                                                                    product.id
+                                                                )
+                                                            }
+                                                            className="bg-red-50 hover:bg-red-100 text-red-700 rounded-md py-1.5 text-[9px] font-black"
+                                                        >
+                                                            🗑️
+                                                        </button>
 
                                                     </div>
-                                                ) : (
-                                                    <span className="text-xl font-bold text-gray-800">
-                                                        ₹{product.price}
-                                                    </span>
-                                                )}
+
+                                                </div>
 
                                             </div>
+                                        );
+                                    }
+                                )}
 
-                                            {/* STOCK */}
+                            </div>
+                        )}
 
-                                            <div className="mt-3">
+                    </div>
 
-                                                <span
-                                                    className={`font-semibold ${Number(
-                                                        product.stock
-                                                    ) > 0
-                                                            ? "text-gray-700"
-                                                            : "text-red-600"
-                                                        }`}
-                                                >
-                                                    📦 Stock:{" "}
-                                                    {product.stock}
-                                                </span>
+                </section>
 
-                                            </div>
+            </main>
 
-                                            {/* DESCRIPTION */}
+            {/* ==================================================
+                COMPACT ADMIN CSS
+            ================================================== */}
 
-                                            {product.description && (
-                                                <p className="text-sm text-gray-500 mt-3 line-clamp-2">
-                                                    {
-                                                        product.description
-                                                    }
-                                                </p>
-                                            )}
+            <style>{`
+                .admin-label {
+                    display: block;
+                    font-size: 10px;
+                    font-weight: 800;
+                    color: #4b5563;
+                    margin-bottom: 4px;
+                }
 
-                                            {/* ACTION BUTTONS */}
-                                            <div className="grid grid-cols-3 gap-2 mt-5">
+                .admin-input {
+                    width: 100%;
+                    height: 38px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 8px;
+                    padding: 0 10px;
+                    font-size: 12px;
+                    outline: none;
+                    background: white;
+                }
 
-                                                <button
-                                                    onClick={() => handleEdit(product)}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold transition"
-                                                >
-                                                    ✏️ Edit
-                                                </button>
+                .admin-input:focus {
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+                }
 
-                                                <button
-                                                    onClick={() => handleToggleActive(product)}
-                                                    className={`text-white py-2.5 rounded-xl font-semibold transition ${product.is_active
-                                                            ? "bg-orange-500 hover:bg-orange-600"
-                                                            : "bg-green-600 hover:bg-green-700"
-                                                        }`}
-                                                >
-                                                    {product.is_active ? "⏸️ Deactivate" : "▶️ Activate"}
-                                                </button>
+                .line-clamp-2 {
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                }
 
-                                                <button
-                                                    onClick={() => handleDelete(product.id)}
-                                                    className="bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-semibold transition"
-                                                >
-                                                    🗑️ Delete
-                                                </button>
+                @media (max-width: 640px) {
+                    .admin-input {
+                        height: 40px;
+                    }
+                }
+            `}</style>
 
-                                            </div>
-
-                                        </div>
-
-                                    </div>
-                                );
-                            })}
-
-                        </div>
-                    )}
-
-                </div>
-
-            </div>
-
-        </main>
+        </div>
     );
 }
 

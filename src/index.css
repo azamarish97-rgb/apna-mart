@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 
+
 html,
 body {
     overflow-x: hidden;
@@ -10,4 +11,94 @@ body {
 
 * {
     box-sizing: border-box;
+}
+
+/* =========================================================
+   APNA MART - MULTI THEME SYSTEM
+========================================================= */
+
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #eff6ff;
+    --accent: #facc15;
+    --page-bg: #f9fafb;
+    --text-main: #111827;
+}
+
+/* 🟢 GREEN */
+[data-theme="green"] {
+    --primary: #16a34a;
+    --primary-dark: #15803d;
+    --primary-light: #f0fdf4;
+    --accent: #facc15;
+    --page-bg: #f7fee7;
+    --text-main: #172016;
+}
+
+/* 🟣 PURPLE */
+[data-theme="purple"] {
+    --primary: #7c3aed;
+    --primary-dark: #6d28d9;
+    --primary-light: #f5f3ff;
+    --accent: #facc15;
+    --page-bg: #faf5ff;
+    --text-main: #1f172f;
+}
+
+/* 🟠 ORANGE */
+[data-theme="orange"] {
+    --primary: #ea580c;
+    --primary-dark: #c2410c;
+    --primary-light: #fff7ed;
+    --accent: #fde047;
+    --page-bg: #fffaf5;
+    --text-main: #1c1917;
+}
+
+/* ⚫ DARK */
+[data-theme="dark"] {
+    --primary: #1f2937;
+    --primary-dark: #111827;
+    --primary-light: #374151;
+    --accent: #facc15;
+    --page-bg: #111827;
+    --text-main: #f9fafb;
+}
+
+/* =========================================================
+   GLOBAL THEME HELPERS
+========================================================= */
+
+.theme-primary {
+    background-color: var(--primary);
+}
+
+.theme-primary-dark {
+    background-color: var(--primary-dark);
+}
+
+.theme-primary-light {
+    background-color: var(--primary-light);
+}
+
+.theme-text {
+    color: var(--text-main);
+}
+
+.theme-page {
+    background-color: var(--page-bg);
+}
+
+/* Smooth theme change */
+body,
+nav,
+button,
+a,
+div,
+section {
+    transition:
+        background-color 0.25s ease,
+        color 0.25s ease,
+        border-color 0.25s ease;
 }

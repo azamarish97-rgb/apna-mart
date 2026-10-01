@@ -30,7 +30,8 @@ function Login() {
             const { error } = await supabase.auth.resetPasswordForEmail(
                 cleanEmail,
                 {
-                    redirectTo: `${window.location.origin}/reset-password`,
+                    redirectTo:
+                        "https://admirable-parfait-4c5e22.netlify.app/reset-password",
                 }
             );
 

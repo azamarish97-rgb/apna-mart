@@ -4,64 +4,74 @@ import Papa from "papaparse";
 import { supabase } from "./supabase";
 
 const MAX_BULK_DELETE = 50;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 25 * 1024 * 1024;
+
+const emptyProduct = {
+    name: "",
+    price: "",
+    offer_price: "",
+    category: "",
+    description: "",
+    stock: "",
+    weight: "",
+    image_url: "",
+    is_active: true,
+};
+
+const emptyBanner = {
+    image_url: "",
+    link_url: "",
+    sort_order: 0,
+    is_active: true,
+};
 
 function AdminDashboard() {
     const navigate = useNavigate();
+
     const fileInputRef = useRef(null);
     const bannerFileInputRef = useRef(null);
+    const navbarFileInputRef = useRef(null);
+    const welcomeFileInputRef = useRef(null);
 
-    // ======================================================
     // PRODUCTS
-    // ======================================================
-
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [bulkUploading, setBulkUploading] = useState(false);
-
     const [editingId, setEditingId] = useState(null);
-
     const [productSearch, setProductSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("all");
-
     const [selectedProducts, setSelectedProducts] = useState([]);
+    const [form, setForm] = useState({ ...emptyProduct });
 
-    const [form, setForm] = useState({
-        name: "",
-        price: "",
-        offer_price: "",
-        category: "",
-        description: "",
-        stock: "",
-        weight: "",
-        image_url: "",
-        is_active: true,
-    });
-
-    // ======================================================
     // BANNERS
-    // ======================================================
-
     const [banners, setBanners] = useState([]);
     const [bannerLoading, setBannerLoading] = useState(false);
     const [bannerSaving, setBannerSaving] = useState(false);
-
     const [editingBannerId, setEditingBannerId] = useState(null);
-
-    const [bannerForm, setBannerForm] = useState({
-        image_url: "",
-        link_url: "",
-        sort_order: 0,
-        is_active: true,
-    });
-
+    const [bannerForm, setBannerForm] = useState({ ...emptyBanner });
     const [bannerFile, setBannerFile] = useState(null);
     const [bannerPreview, setBannerPreview] = useState("");
 
-    // ======================================================
-    // ADMIN CHECK
-    // ======================================================
+    // NAVBAR BACKGROUND
+    const [navbarMediaType, setNavbarMediaType] = useState("image");
+    const [navbarMediaFile, setNavbarMediaFile] = useState(null);
+    const [navbarMediaUrl, setNavbarMediaUrl] = useState("");
+    const [navbarMediaPreview, setNavbarMediaPreview] = useState("");
+    const [navbarMediaLoading, setNavbarMediaLoading] = useState(false);
+    const [navbarMediaSaving, setNavbarMediaSaving] = useState(false);
+    const [navbarMediaMessage, setNavbarMediaMessage] = useState("");
 
+    // WELCOME SCREEN
+    const [welcomeImageUrl, setWelcomeImageUrl] = useState("");
+    const [welcomeFile, setWelcomeFile] = useState(null);
+    const [welcomePreview, setWelcomePreview] = useState("");
+    const [welcomeLoading, setWelcomeLoading] = useState(false);
+    const [welcomeSaving, setWelcomeSaving] = useState(false);
+    const [welcomeMessage, setWelcomeMessage] = useState("");
+
+    // ADMIN CHECK
     useEffect(() => {
         checkAdmin();
     }, []);
@@ -70,9 +80,10 @@ function AdminDashboard() {
         try {
             const {
                 data: { user },
+                error: authError,
             } = await supabase.auth.getUser();
 
-            if (!user) {
+            if (authError || !user) {
                 navigate("/login");
                 return;
             }
@@ -83,13 +94,7 @@ function AdminDashboard() {
                 .eq("id", user.id)
                 .single();
 
-            if (error) {
-                console.error("PROFILE ERROR:", error);
-                navigate("/");
-                return;
-            }
-
-            if (profile?.role !== "admin") {
+            if (error || profile?.role !== "admin") {
                 alert("Admin access required ❌");
                 navigate("/");
                 return;
@@ -98,6 +103,8 @@ function AdminDashboard() {
             await Promise.all([
                 fetchProducts(),
                 fetchBanners(),
+                fetchNavbarMedia(),
+                fetchWelcomeScreen(),
             ]);
         } catch (error) {
             console.error("ADMIN CHECK ERROR:", error);
@@ -105,9 +112,9 @@ function AdminDashboard() {
         }
     };
 
-    // ======================================================
-    // FETCH PRODUCTS
-    // ======================================================
+    // =====================================================
+    // PRODUCTS
+    // =====================================================
 
     const fetchProducts = async () => {
         try {
@@ -116,49 +123,37 @@ function AdminDashboard() {
             const { data, error } = await supabase
                 .from("products")
                 .select("*")
-                .order("created_at", {
-                    ascending: false,
-                });
+                .order("created_at", { ascending: false });
 
-            if (error) {
-                console.error("PRODUCT FETCH ERROR:", error);
-                alert(`Products load nahi hue ❌\n\n${error.message}`);
-                return;
-            }
+            if (error) throw error;
 
             setProducts(data || []);
 
-            // Remove selected IDs that no longer exist
             const existingIds = new Set(
                 (data || []).map((product) => String(product.id))
             );
 
-            setSelectedProducts((prev) =>
-                prev.filter((id) => existingIds.has(String(id)))
+            setSelectedProducts((previous) =>
+                previous.filter((id) => existingIds.has(String(id)))
             );
         } catch (error) {
             console.error("PRODUCT FETCH ERROR:", error);
+            alert(`Products load nahi hue ❌\n${error.message}`);
         } finally {
             setLoading(false);
         }
     };
 
-    // ======================================================
-    // PRODUCT CATEGORIES
-    // ======================================================
-
-    const categories = useMemo(() => {
-        const values = products
-            .map((product) => product.category)
-            .filter(Boolean)
-            .map((category) => category.trim());
-
-        return [...new Set(values)].sort();
-    }, [products]);
-
-    // ======================================================
-    // FILTERED PRODUCTS
-    // ======================================================
+    const categories = useMemo(
+        () => [
+            ...new Set(
+                products
+                    .map((product) => product.category?.trim())
+                    .filter(Boolean)
+            ),
+        ].sort(),
+        [products]
+    );
 
     const filteredProducts = useMemo(() => {
         const search = productSearch.trim().toLowerCase();
@@ -176,67 +171,53 @@ function AdminDashboard() {
 
             return matchesSearch && matchesCategory;
         });
-    }, [
-        products,
-        productSearch,
-        categoryFilter,
-    ]);
+    }, [products, productSearch, categoryFilter]);
 
-    // ======================================================
-    // PRODUCT FORM
-    // ======================================================
+    const handleProductChange = (event) => {
+        const { name, value, type, checked } = event.target;
 
-    const handleProductChange = (e) => {
-        const { name, value, type, checked } = e.target;
-
-        setForm((prev) => ({
-            ...prev,
+        setForm((previous) => ({
+            ...previous,
             [name]: type === "checkbox" ? checked : value,
         }));
     };
 
     const resetForm = () => {
-        setForm({
-            name: "",
-            price: "",
-            offer_price: "",
-            category: "",
-            description: "",
-            stock: "",
-            weight: "",
-            image_url: "",
-            is_active: true,
-        });
-
+        setForm({ ...emptyProduct });
         setEditingId(null);
     };
 
-    // ======================================================
-    // ADD / UPDATE PRODUCT
-    // ======================================================
-
-    const handleProductSubmit = async (e) => {
-        e.preventDefault();
+    const handleProductSubmit = async (event) => {
+        event.preventDefault();
 
         if (!form.name.trim()) {
             alert("Product name required ❌");
             return;
         }
 
-        if (form.price === "" || Number(form.price) < 0) {
+        if (
+            form.price === "" ||
+            !Number.isFinite(Number(form.price)) ||
+            Number(form.price) < 0
+        ) {
             alert("Valid price enter karo ❌");
             return;
         }
 
         if (
             form.offer_price !== "" &&
-            Number(form.offer_price) < 0
+            (!Number.isFinite(Number(form.offer_price)) ||
+                Number(form.offer_price) < 0)
         ) {
             alert("Valid offer price enter karo ❌");
             return;
         }
 
-        if (form.stock === "" || Number(form.stock) < 0) {
+        if (
+            form.stock === "" ||
+            !Number.isFinite(Number(form.stock)) ||
+            Number(form.stock) < 0
+        ) {
             alert("Valid stock enter karo ❌");
             return;
         }
@@ -260,28 +241,16 @@ function AdminDashboard() {
                 updated_at: new Date().toISOString(),
             };
 
-            let error;
-
-            if (editingId) {
-                const result = await supabase
+            const result = editingId
+                ? await supabase
                     .from("products")
                     .update(productData)
-                    .eq("id", editingId);
-
-                error = result.error;
-            } else {
-                const result = await supabase
+                    .eq("id", editingId)
+                : await supabase
                     .from("products")
                     .insert([productData]);
 
-                error = result.error;
-            }
-
-            if (error) {
-                console.error("PRODUCT SAVE ERROR:", error);
-                alert(`Product save nahi hua ❌\n\n${error.message}`);
-                return;
-            }
+            if (result.error) throw result.error;
 
             alert(
                 editingId
@@ -293,15 +262,11 @@ function AdminDashboard() {
             await fetchProducts();
         } catch (error) {
             console.error("PRODUCT SAVE ERROR:", error);
-            alert(`Something went wrong ❌\n\n${error.message}`);
+            alert(`Product save nahi hua ❌\n${error.message}`);
         } finally {
             setSaving(false);
         }
     };
-
-    // ======================================================
-    // EDIT PRODUCT
-    // ======================================================
 
     const handleEdit = (product) => {
         setEditingId(product.id);
@@ -318,15 +283,8 @@ function AdminDashboard() {
             is_active: product.is_active ?? true,
         });
 
-        window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
     };
-
-    // ======================================================
-    // TOGGLE PRODUCT ACTIVE
-    // ======================================================
 
     const handleToggleActive = async (product) => {
         try {
@@ -338,28 +296,18 @@ function AdminDashboard() {
                 })
                 .eq("id", product.id);
 
-            if (error) {
-                console.error("TOGGLE ERROR:", error);
-                alert(`Status change nahi hua ❌\n\n${error.message}`);
-                return;
-            }
+            if (error) throw error;
 
             await fetchProducts();
         } catch (error) {
-            console.error("TOGGLE ERROR:", error);
+            alert(`Status change nahi hua ❌\n${error.message}`);
         }
     };
 
-    // ======================================================
-    // SINGLE DELETE
-    // ======================================================
-
     const handleDelete = async (id) => {
-        const confirmed = window.confirm(
-            "Ye product permanently delete karna hai?"
-        );
-
-        if (!confirmed) return;
+        if (!window.confirm("Ye product permanently delete karna hai?")) {
+            return;
+        }
 
         try {
             setSaving(true);
@@ -369,157 +317,111 @@ function AdminDashboard() {
                 .delete()
                 .eq("id", id);
 
-            if (error) {
-                console.error("DELETE ERROR:", error);
-                alert(`Delete nahi hua ❌\n\n${error.message}`);
-                return;
-            }
+            if (error) throw error;
 
-            setSelectedProducts((prev) =>
-                prev.filter((item) => String(item) !== String(id))
+            setSelectedProducts((previous) =>
+                previous.filter((item) => String(item) !== String(id))
             );
 
-            if (
-                editingId &&
-                String(editingId) === String(id)
-            ) {
+            if (String(editingId) === String(id)) {
                 resetForm();
             }
 
             await fetchProducts();
-
             alert("Product deleted successfully 🗑️");
         } catch (error) {
-            console.error("DELETE ERROR:", error);
-            alert(`Something went wrong ❌\n\n${error.message}`);
+            alert(`Product delete nahi hua ❌\n${error.message}`);
         } finally {
             setSaving(false);
         }
     };
 
-    // ======================================================
-    // SELECT PRODUCT
-    // ======================================================
-
     const handleSelectProduct = (id) => {
-        setSelectedProducts((prev) => {
-            const alreadySelected = prev.some(
+        setSelectedProducts((previous) => {
+            const exists = previous.some(
                 (item) => String(item) === String(id)
             );
 
-            if (alreadySelected) {
-                return prev.filter(
+            if (exists) {
+                return previous.filter(
                     (item) => String(item) !== String(id)
                 );
             }
 
-            if (prev.length >= MAX_BULK_DELETE) {
-                alert(
-                    "Ek baar me maximum 50 products select kar sakte ho ❌"
-                );
-
-                return prev;
+            if (previous.length >= MAX_BULK_DELETE) {
+                alert("Ek baar mein maximum 50 products select kar sakte ho.");
+                return previous;
             }
 
-            return [...prev, id];
+            return [...previous, id];
         });
     };
 
-    // ======================================================
-    // SELECT ALL VISIBLE - MAX 50
-    // ======================================================
-
     const handleSelectAllProducts = () => {
-        const visibleIds = filteredProducts
-            .map((product) => product.id);
+        const visibleIds = filteredProducts.map((product) => product.id);
 
-        const allVisibleSelected =
+        const allSelected =
             visibleIds.length > 0 &&
             visibleIds.every((id) =>
                 selectedProducts.some(
-                    (selectedId) =>
-                        String(selectedId) === String(id)
+                    (selected) => String(selected) === String(id)
                 )
             );
 
-        if (allVisibleSelected) {
-            setSelectedProducts((prev) =>
-                prev.filter(
+        if (allSelected) {
+            setSelectedProducts((previous) =>
+                previous.filter(
                     (id) =>
                         !visibleIds.some(
-                            (visibleId) =>
-                                String(visibleId) === String(id)
+                            (visible) => String(visible) === String(id)
                         )
                 )
             );
-
             return;
         }
 
-        const currentSelected = [...selectedProducts];
+        const remainingSlots =
+            MAX_BULK_DELETE - selectedProducts.length;
 
-        const availableSlots =
-            MAX_BULK_DELETE - currentSelected.length;
-
-        if (availableSlots <= 0) {
-            alert(
-                "Maximum 50 products already selected ❌"
-            );
+        if (remainingSlots <= 0) {
+            alert("Maximum 50 products already selected.");
             return;
         }
 
-        const idsToAdd = visibleIds
-            .filter(
-                (id) =>
-                    !currentSelected.some(
-                        (selectedId) =>
-                            String(selectedId) === String(id)
-                    )
-            )
-            .slice(0, availableSlots);
-
-        setSelectedProducts([
-            ...currentSelected,
-            ...idsToAdd,
-        ]);
-
-        const remainingUnselected = visibleIds.filter(
+        const unselected = visibleIds.filter(
             (id) =>
-                !currentSelected.some(
-                    (selectedId) =>
-                        String(selectedId) === String(id)
+                !selectedProducts.some(
+                    (selected) => String(selected) === String(id)
                 )
         );
 
-        if (idsToAdd.length < remainingUnselected.length) {
-            alert(
-                "Maximum 50 products hi select ho sakte hain ❌"
-            );
+        const additions = unselected.slice(0, remainingSlots);
+
+        setSelectedProducts((previous) => [...previous, ...additions]);
+
+        if (additions.length < unselected.length) {
+            alert("Maximum 50 products hi select ho sakte hain.");
         }
     };
 
-    // ======================================================
-    // BULK DELETE 50 PRODUCTS
-    // ======================================================
-
     const handleBulkDelete = async () => {
-        if (selectedProducts.length === 0) {
-            alert("Pehle products select karo ❌");
+        if (!selectedProducts.length) {
+            alert("Pehle products select karo.");
             return;
         }
 
         if (selectedProducts.length > MAX_BULK_DELETE) {
-            alert(
-                "Maximum 50 products hi delete kar sakte ho ❌"
-            );
+            alert("Maximum 50 products hi delete kar sakte ho.");
             return;
         }
 
-        const confirmed = window.confirm(
-            `${selectedProducts.length} products permanently delete karne hain?\n\nYe action undo nahi kiya ja sakta.`
-        );
-
-        if (!confirmed) return;
+        if (
+            !window.confirm(
+                `${selectedProducts.length} products permanently delete karne hain?`
+            )
+        ) {
+            return;
+        }
 
         try {
             setSaving(true);
@@ -529,60 +431,38 @@ function AdminDashboard() {
                 .delete()
                 .in("id", selectedProducts);
 
-            if (error) {
-                console.error(
-                    "BULK DELETE ERROR:",
-                    error
-                );
+            if (error) throw error;
 
-                alert(
-                    `Bulk delete fail hua ❌\n\n${error.message}`
-                );
-
-                return;
-            }
-
-            const deletedCount = selectedProducts.length;
-
-            setSelectedProducts([]);
+            const count = selectedProducts.length;
 
             if (
-                editingId &&
                 selectedProducts.some(
-                    (id) =>
-                        String(id) === String(editingId)
+                    (id) => String(id) === String(editingId)
                 )
             ) {
                 resetForm();
             }
 
+            setSelectedProducts([]);
             await fetchProducts();
 
-            alert(
-                `${deletedCount} products successfully deleted 🗑️`
-            );
+            alert(`${count} products deleted successfully 🗑️`);
         } catch (error) {
-            console.error(
-                "BULK DELETE ERROR:",
-                error
-            );
-
-            alert(
-                `Something went wrong ❌\n\n${error.message}`
-            );
+            alert(`Bulk delete fail hua ❌\n${error.message}`);
         } finally {
             setSaving(false);
         }
     };
 
-    // ======================================================
+    // =====================================================
     // CSV BULK UPLOAD
-    // ======================================================
+    // =====================================================
 
-    const handleCSVUpload = (e) => {
-        const file = e.target.files?.[0];
-
+    const handleCSVUpload = (event) => {
+        const file = event.target.files?.[0];
         if (!file) return;
+
+        setBulkUploading(true);
 
         Papa.parse(file, {
             header: true,
@@ -590,87 +470,54 @@ function AdminDashboard() {
 
             complete: async (results) => {
                 try {
-                    if (!results.data?.length) {
-                        alert("CSV empty hai ❌");
-                        return;
-                    }
-
-                    setBulkUploading(true);
-
-                    const rows = results.data
+                    const rows = (results.data || [])
                         .map((row) => {
-                            const name =
-                                row.name?.trim();
-
+                            const name = row.name?.trim();
                             if (!name) return null;
 
-                            const price =
-                                Number(row.price);
+                            const price = Number(row.price);
 
                             const offerPrice =
                                 row.offer_price === "" ||
                                     row.offer_price == null
                                     ? null
-                                    : Number(
-                                        row.offer_price
-                                    );
+                                    : Number(row.offer_price);
 
                             const stock =
-                                row.stock === "" ||
-                                    row.stock == null
+                                row.stock === "" || row.stock == null
                                     ? 0
                                     : Number(row.stock);
 
                             return {
                                 name,
-
                                 price:
-                                    Number.isFinite(price)
+                                    Number.isFinite(price) && price >= 0
                                         ? price
                                         : 0,
-
                                 offer_price:
                                     offerPrice !== null &&
-                                        Number.isFinite(
-                                            offerPrice
-                                        )
+                                        Number.isFinite(offerPrice) &&
+                                        offerPrice >= 0
                                         ? offerPrice
                                         : null,
-
-                                category:
-                                    row.category?.trim() ||
-                                    null,
-
+                                category: row.category?.trim() || null,
                                 description:
-                                    row.description?.trim() ||
-                                    null,
-
+                                    row.description?.trim() || null,
                                 stock:
-                                    Number.isFinite(stock)
+                                    Number.isFinite(stock) && stock >= 0
                                         ? stock
                                         : 0,
-
-                                weight:
-                                    row.weight?.trim() ||
-                                    null,
-
-                                image_url:
-                                    row.image_url?.trim() ||
-                                    null,
-
+                                weight: row.weight?.trim() || null,
+                                image_url: row.image_url?.trim() || null,
                                 is_active:
-                                    String(
-                                        row.is_active ?? "true"
-                                    ).toLowerCase() !==
-                                    "false",
+                                    String(row.is_active ?? "true")
+                                        .toLowerCase() !== "false",
                             };
                         })
                         .filter(Boolean);
 
                     if (!rows.length) {
-                        alert(
-                            "CSV me valid products nahi mile ❌"
-                        );
+                        alert("CSV mein valid products nahi mile.");
                         return;
                     }
 
@@ -678,33 +525,12 @@ function AdminDashboard() {
                         .from("products")
                         .insert(rows);
 
-                    if (error) {
-                        console.error(
-                            "CSV UPLOAD ERROR:",
-                            error
-                        );
+                    if (error) throw error;
 
-                        alert(
-                            `CSV upload fail hua ❌\n\n${error.message}`
-                        );
-
-                        return;
-                    }
-
-                    alert(
-                        `${rows.length} products successfully uploaded ✅`
-                    );
-
+                    alert(`${rows.length} products uploaded successfully ✅`);
                     await fetchProducts();
                 } catch (error) {
-                    console.error(
-                        "CSV ERROR:",
-                        error
-                    );
-
-                    alert(
-                        `CSV upload error ❌\n\n${error.message}`
-                    );
+                    alert(`CSV upload fail hua ❌\n${error.message}`);
                 } finally {
                     setBulkUploading(false);
 
@@ -715,20 +541,19 @@ function AdminDashboard() {
             },
 
             error: (error) => {
-                console.error("CSV PARSE ERROR:", error);
-
-                alert(
-                    `CSV read nahi hua ❌\n\n${error.message}`
-                );
-
+                alert(`CSV read nahi hua ❌\n${error.message}`);
                 setBulkUploading(false);
+
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
             },
         });
     };
 
-    // ======================================================
-    // FETCH BANNERS
-    // ======================================================
+    // =====================================================
+    // BANNERS
+    // =====================================================
 
     const fetchBanners = async () => {
         try {
@@ -737,59 +562,31 @@ function AdminDashboard() {
             const { data, error } = await supabase
                 .from("banners")
                 .select("*")
-                .order("sort_order", {
-                    ascending: true,
-                })
-                .order("created_at", {
-                    ascending: false,
-                });
+                .order("sort_order", { ascending: true })
+                .order("created_at", { ascending: false });
 
-            if (error) {
-                console.error(
-                    "BANNER FETCH ERROR:",
-                    error
-                );
-
-                alert(
-                    `Banners load nahi hue ❌\n\n${error.message}`
-                );
-
-                return;
-            }
+            if (error) throw error;
 
             setBanners(data || []);
         } catch (error) {
-            console.error(
-                "BANNER FETCH ERROR:",
-                error
-            );
+            console.error("BANNER FETCH ERROR:", error);
+            alert(`Banners load nahi hue ❌\n${error.message}`);
         } finally {
             setBannerLoading(false);
         }
     };
 
-    // ======================================================
-    // BANNER FORM CHANGE
-    // ======================================================
+    const handleBannerChange = (event) => {
+        const { name, value, type, checked } = event.target;
 
-    const handleBannerChange = (e) => {
-        const { name, value, type, checked } = e.target;
-
-        setBannerForm((prev) => ({
-            ...prev,
-            [name]:
-                type === "checkbox"
-                    ? checked
-                    : value,
+        setBannerForm((previous) => ({
+            ...previous,
+            [name]: type === "checkbox" ? checked : value,
         }));
     };
 
-    // ======================================================
-    // BANNER FILE CHANGE
-    // ======================================================
-
-    const handleBannerFileChange = (e) => {
-        const file = e.target.files?.[0];
+    const handleBannerFileChange = (event) => {
+        const file = event.target.files?.[0];
 
         if (!file) {
             setBannerFile(null);
@@ -798,96 +595,43 @@ function AdminDashboard() {
         }
 
         if (!file.type.startsWith("image/")) {
-            alert(
-                "Sirf image file select karo ❌"
-            );
-
-            e.target.value = "";
-            setBannerFile(null);
-            setBannerPreview("");
-
+            alert("Sirf image file select karo.");
+            event.target.value = "";
             return;
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-            alert(
-                "Banner image 5MB se chhoti honi chahiye ❌"
-            );
-
-            e.target.value = "";
-            setBannerFile(null);
-            setBannerPreview("");
-
+        if (file.size > MAX_IMAGE_SIZE) {
+            alert("Banner image 5MB se chhoti honi chahiye.");
+            event.target.value = "";
             return;
         }
 
         setBannerFile(file);
-
-        const previewUrl =
-            URL.createObjectURL(file);
-
-        setBannerPreview(previewUrl);
+        setBannerPreview(URL.createObjectURL(file));
     };
-
-    // ======================================================
-    // UPLOAD BANNER IMAGE TO SUPABASE STORAGE
-    // ======================================================
 
     const uploadBannerImage = async (file) => {
-        if (!file) return null;
+        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const name = `banner-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 9)}.${ext}`;
 
-        const fileExt =
-            file.name
-                .split(".")
-                .pop()
-                ?.toLowerCase() || "jpg";
-
-        const randomPart =
-            Math.random()
-                .toString(36)
-                .substring(2, 9);
-
-        const fileName =
-            `banner-${Date.now()}-${randomPart}.${fileExt}`;
-
-        const { error: uploadError } =
-            await supabase.storage
-                .from("banners")
-                .upload(
-                    fileName,
-                    file,
-                    {
-                        cacheControl: "3600",
-                        upsert: false,
-                        contentType: file.type,
-                    }
-                );
-
-        if (uploadError) {
-            throw uploadError;
-        }
-
-        const {
-            data: publicUrlData,
-        } = supabase.storage
+        const { error } = await supabase.storage
             .from("banners")
-            .getPublicUrl(fileName);
+            .upload(name, file, {
+                cacheControl: "3600",
+                upsert: false,
+                contentType: file.type,
+            });
 
-        return publicUrlData?.publicUrl || null;
+        if (error) throw error;
+
+        return supabase.storage.from("banners").getPublicUrl(name)
+            .data.publicUrl;
     };
 
-    // ======================================================
-    // RESET BANNER
-    // ======================================================
-
     const resetBannerForm = () => {
-        setBannerForm({
-            image_url: "",
-            link_url: "",
-            sort_order: 0,
-            is_active: true,
-        });
-
+        setBannerForm({ ...emptyBanner });
         setBannerFile(null);
         setBannerPreview("");
         setEditingBannerId(null);
@@ -897,99 +641,39 @@ function AdminDashboard() {
         }
     };
 
-    // ======================================================
-    // ADD / UPDATE BANNER
-    // ======================================================
+    const handleBannerSubmit = async (event) => {
+        event.preventDefault();
 
-    const handleBannerSubmit = async (e) => {
-        e.preventDefault();
-
-        if (
-            !bannerFile &&
-            !bannerForm.image_url.trim()
-        ) {
-            alert(
-                "Gallery se banner select karo ya Image URL enter karo ❌"
-            );
-
+        if (!bannerFile && !bannerForm.image_url.trim()) {
+            alert("Banner image select karo ya Image URL enter karo.");
             return;
         }
 
         try {
             setBannerSaving(true);
 
-            let finalImageUrl =
-                bannerForm.image_url.trim();
-
-            // Gallery image gets priority
-            if (bannerFile) {
-                finalImageUrl =
-                    await uploadBannerImage(
-                        bannerFile
-                    );
-            }
-
-            if (!finalImageUrl) {
-                alert(
-                    "Banner image nahi mili ❌"
-                );
-
-                return;
-            }
+            const imageUrl = bannerFile
+                ? await uploadBannerImage(bannerFile)
+                : bannerForm.image_url.trim();
 
             const bannerData = {
-                image_url: finalImageUrl,
-
-                link_url:
-                    bannerForm.link_url.trim() ||
-                    null,
-
-                sort_order:
-                    Number(
-                        bannerForm.sort_order
-                    ) || 0,
-
-                is_active:
-                    bannerForm.is_active,
-
-                updated_at:
-                    new Date().toISOString(),
+                image_url: imageUrl,
+                link_url: bannerForm.link_url.trim() || null,
+                sort_order: Number(bannerForm.sort_order) || 0,
+                is_active: bannerForm.is_active,
+                updated_at: new Date().toISOString(),
             };
 
-            let error;
-
-            if (editingBannerId) {
-                const result = await supabase
+            const result = editingBannerId
+                ? await supabase
                     .from("banners")
                     .update(bannerData)
-                    .eq(
-                        "id",
-                        editingBannerId
-                    );
-
-                error = result.error;
-            } else {
-                const result = await supabase
+                    .eq("id", editingBannerId)
+                : await supabase
                     .from("banners")
-                    .insert([
-                        bannerData,
-                    ]);
+                    .insert([bannerData]);
 
-                error = result.error;
-            }
-
-            if (error) {
-                console.error(
-                    "BANNER SAVE ERROR:",
-                    error
-                );
-
-                alert(
-                    `Banner save nahi hua ❌\n\n${error.message}`
-                );
-
-                return;
-            }
+            if (result.error) throw result.error;
 
             alert(
                 editingBannerId
@@ -1000,38 +684,20 @@ function AdminDashboard() {
             resetBannerForm();
             await fetchBanners();
         } catch (error) {
-            console.error(
-                "BANNER SAVE ERROR:",
-                error
-            );
-
-            alert(
-                `Banner save error ❌\n\n${error.message}`
-            );
+            alert(`Banner save nahi hua ❌\n${error.message}`);
         } finally {
             setBannerSaving(false);
         }
     };
 
-    // ======================================================
-    // EDIT BANNER
-    // ======================================================
-
     const handleEditBanner = (banner) => {
         setEditingBannerId(banner.id);
 
         setBannerForm({
-            image_url:
-                banner.image_url || "",
-
-            link_url:
-                banner.link_url || "",
-
-            sort_order:
-                banner.sort_order ?? 0,
-
-            is_active:
-                banner.is_active ?? true,
+            image_url: banner.image_url || "",
+            link_url: banner.link_url || "",
+            sort_order: banner.sort_order ?? 0,
+            is_active: banner.is_active ?? true,
         });
 
         setBannerFile(null);
@@ -1041,22 +707,13 @@ function AdminDashboard() {
             bannerFileInputRef.current.value = "";
         }
 
-        window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
-    // ======================================================
-    // DELETE BANNER
-    // ======================================================
-
     const handleDeleteBanner = async (id) => {
-        const confirmed = window.confirm(
-            "Ye banner permanently delete karna hai?"
-        );
-
-        if (!confirmed) return;
+        if (!window.confirm("Ye banner permanently delete karna hai?")) {
+            return;
+        }
 
         try {
             const { error } = await supabase
@@ -1064,1320 +721,1040 @@ function AdminDashboard() {
                 .delete()
                 .eq("id", id);
 
-            if (error) {
-                console.error(
-                    "BANNER DELETE ERROR:",
-                    error
-                );
+            if (error) throw error;
 
-                alert(
-                    `Banner delete nahi hua ❌\n\n${error.message}`
-                );
-
-                return;
-            }
-
-            if (
-                String(editingBannerId) ===
-                String(id)
-            ) {
+            if (String(editingBannerId) === String(id)) {
                 resetBannerForm();
             }
 
             await fetchBanners();
-
-            alert(
-                "Banner deleted successfully 🗑️"
-            );
+            alert("Banner deleted successfully 🗑️");
         } catch (error) {
-            console.error(
-                "BANNER DELETE ERROR:",
-                error
-            );
-
-            alert(
-                `Something went wrong ❌\n\n${error.message}`
-            );
+            alert(`Banner delete nahi hua ❌\n${error.message}`);
         }
     };
-
-    // ======================================================
-    // TOGGLE BANNER
-    // ======================================================
 
     const handleToggleBanner = async (banner) => {
         try {
             const { error } = await supabase
                 .from("banners")
                 .update({
-                    is_active:
-                        !banner.is_active,
-
-                    updated_at:
-                        new Date().toISOString(),
+                    is_active: !banner.is_active,
+                    updated_at: new Date().toISOString(),
                 })
-                .eq(
-                    "id",
-                    banner.id
-                );
+                .eq("id", banner.id);
 
-            if (error) {
-                console.error(
-                    "BANNER TOGGLE ERROR:",
-                    error
-                );
-
-                alert(
-                    `Banner status change nahi hua ❌\n\n${error.message}`
-                );
-
-                return;
-            }
+            if (error) throw error;
 
             await fetchBanners();
         } catch (error) {
-            console.error(
-                "BANNER TOGGLE ERROR:",
-                error
-            );
+            alert(`Banner status change nahi hua ❌\n${error.message}`);
         }
     };
 
-    // ======================================================
+    // =====================================================
+    // NAVBAR BACKGROUND
+    // =====================================================
+
+    const fetchNavbarMedia = async () => {
+        try {
+            setNavbarMediaLoading(true);
+
+            const { data, error } = await supabase
+                .from("site_settings")
+                .select("setting_value")
+                .eq("setting_key", "navbar_background")
+                .maybeSingle();
+
+            if (error) throw error;
+
+            const value = data?.setting_value || {};
+
+            setNavbarMediaType(
+                value.media_type === "video" ? "video" : "image"
+            );
+            setNavbarMediaUrl(value.media_url || "");
+            setNavbarMediaFile(null);
+            setNavbarMediaPreview("");
+        } catch (error) {
+            console.error("NAVBAR MEDIA FETCH ERROR:", error);
+            setNavbarMediaMessage(
+                `Background setting load nahi hui: ${error.message}`
+            );
+        } finally {
+            setNavbarMediaLoading(false);
+        }
+    };
+
+    const handleNavbarMediaChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const isVideo = file.type.startsWith("video/");
+        const isImage = file.type.startsWith("image/");
+
+        if (!isImage && !isVideo) {
+            alert("Image, GIF ya video file select karo.");
+            event.target.value = "";
+            return;
+        }
+
+        if (
+            isVideo &&
+            !["video/mp4", "video/webm", "video/ogg"].includes(file.type)
+        ) {
+            alert("Video format MP4, WEBM ya OGG hona chahiye.");
+            event.target.value = "";
+            return;
+        }
+
+        if (isImage && file.size > MAX_IMAGE_SIZE) {
+            alert("Image/GIF maximum 5MB hona chahiye.");
+            event.target.value = "";
+            return;
+        }
+
+        if (isVideo && file.size > MAX_VIDEO_SIZE) {
+            alert("Video maximum 25MB hona chahiye.");
+            event.target.value = "";
+            return;
+        }
+
+        setNavbarMediaType(isVideo ? "video" : "image");
+        setNavbarMediaFile(file);
+        setNavbarMediaPreview(URL.createObjectURL(file));
+        setNavbarMediaMessage("");
+    };
+
+    const handleSaveNavbarMedia = async () => {
+        if (!navbarMediaFile && !navbarMediaUrl.trim()) {
+            alert("Pehle background image, GIF ya video select karo.");
+            return;
+        }
+
+        try {
+            setNavbarMediaSaving(true);
+            setNavbarMediaMessage("");
+
+            let finalUrl = navbarMediaUrl.trim();
+
+            if (navbarMediaFile) {
+                const file = navbarMediaFile;
+                const extension =
+                    file.name.split(".").pop()?.toLowerCase() ||
+                    (navbarMediaType === "video" ? "mp4" : "jpg");
+
+                const filePath =
+                    `navbar-background/${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 9)}.${extension}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from("site-images")
+                    .upload(filePath, file, {
+                        cacheControl: "3600",
+                        upsert: false,
+                        contentType: file.type,
+                    });
+
+                if (uploadError) throw uploadError;
+
+                const { data: publicData } = supabase.storage
+                    .from("site-images")
+                    .getPublicUrl(filePath);
+
+                finalUrl = publicData.publicUrl;
+            }
+
+            const { error } = await supabase
+                .from("site_settings")
+                .upsert(
+                    {
+                        setting_key: "navbar_background",
+                        setting_value: {
+                            media_type: navbarMediaType,
+                            media_url: finalUrl,
+                        },
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "setting_key" }
+                );
+
+            if (error) throw error;
+
+            setNavbarMediaUrl(finalUrl);
+            setNavbarMediaFile(null);
+            setNavbarMediaPreview("");
+
+            if (navbarFileInputRef.current) {
+                navbarFileInputRef.current.value = "";
+            }
+
+            setNavbarMediaMessage(
+                "Navbar background successfully save ho gaya ✅"
+            );
+        } catch (error) {
+            console.error("NAVBAR MEDIA SAVE ERROR:", error);
+            setNavbarMediaMessage(`Save nahi hua ❌ ${error.message}`);
+        } finally {
+            setNavbarMediaSaving(false);
+        }
+    };
+
+    const handleRemoveNavbarMedia = async () => {
+        if (!window.confirm("Navbar background remove karna hai?")) {
+            return;
+        }
+
+        try {
+            setNavbarMediaSaving(true);
+            setNavbarMediaMessage("");
+
+            const { error } = await supabase
+                .from("site_settings")
+                .upsert(
+                    {
+                        setting_key: "navbar_background",
+                        setting_value: {
+                            media_type: "none",
+                            media_url: "",
+                        },
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "setting_key" }
+                );
+
+            if (error) throw error;
+
+            setNavbarMediaUrl("");
+            setNavbarMediaFile(null);
+            setNavbarMediaPreview("");
+            setNavbarMediaType("image");
+
+            if (navbarFileInputRef.current) {
+                navbarFileInputRef.current.value = "";
+            }
+
+            setNavbarMediaMessage("Navbar background remove ho gaya ✅");
+        } catch (error) {
+            setNavbarMediaMessage(`Remove nahi hua ❌ ${error.message}`);
+        } finally {
+            setNavbarMediaSaving(false);
+        }
+    };
+
+    // =====================================================
+    // WELCOME SCREEN
+    // =====================================================
+
+    const fetchWelcomeScreen = async () => {
+        try {
+            setWelcomeLoading(true);
+            setWelcomeMessage("");
+
+            const { data, error } = await supabase
+                .from("site_settings")
+                .select("setting_value")
+                .eq("setting_key", "welcome_screen")
+                .maybeSingle();
+
+            if (error) throw error;
+
+            setWelcomeImageUrl(data?.setting_value?.image_url || "");
+            setWelcomeFile(null);
+            setWelcomePreview("");
+        } catch (error) {
+            console.error("WELCOME SCREEN FETCH ERROR:", error);
+            setWelcomeMessage(`Photo load nahi hui: ${error.message}`);
+        } finally {
+            setWelcomeLoading(false);
+        }
+    };
+
+    const handleWelcomeFileChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith("image/")) {
+            alert("Sirf image ya GIF select karo.");
+            event.target.value = "";
+            return;
+        }
+
+        if (file.size > MAX_IMAGE_SIZE) {
+            alert("Welcome photo maximum 5MB honi chahiye.");
+            event.target.value = "";
+            return;
+        }
+
+        setWelcomeFile(file);
+        setWelcomePreview(URL.createObjectURL(file));
+        setWelcomeMessage("");
+    };
+
+    const handleSaveWelcomeScreen = async () => {
+        if (!welcomeFile && !welcomeImageUrl.trim()) {
+            alert("Pehle welcome photo upload karo ya image URL enter karo.");
+            return;
+        }
+
+        try {
+            setWelcomeSaving(true);
+            setWelcomeMessage("");
+
+            let finalUrl = welcomeImageUrl.trim();
+
+            if (welcomeFile) {
+                const file = welcomeFile;
+                const extension =
+                    file.name.split(".").pop()?.toLowerCase() || "jpg";
+
+                const filePath =
+                    `welcome-screen/${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 9)}.${extension}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from("site-images")
+                    .upload(filePath, file, {
+                        cacheControl: "3600",
+                        upsert: false,
+                        contentType: file.type,
+                    });
+
+                if (uploadError) throw uploadError;
+
+                const { data: publicData } = supabase.storage
+                    .from("site-images")
+                    .getPublicUrl(filePath);
+
+                finalUrl = publicData.publicUrl;
+            }
+
+            const { error } = await supabase
+                .from("site_settings")
+                .upsert(
+                    {
+                        setting_key: "welcome_screen",
+                        setting_value: {
+                            image_url: finalUrl,
+                        },
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "setting_key" }
+                );
+
+            if (error) throw error;
+
+            setWelcomeImageUrl(finalUrl);
+            setWelcomeFile(null);
+            setWelcomePreview("");
+
+            if (welcomeFileInputRef.current) {
+                welcomeFileInputRef.current.value = "";
+            }
+
+            setWelcomeMessage("Welcome photo successfully save ho gayi ✅");
+        } catch (error) {
+            console.error("WELCOME SCREEN SAVE ERROR:", error);
+            setWelcomeMessage(`Save nahi hua ❌ ${error.message}`);
+        } finally {
+            setWelcomeSaving(false);
+        }
+    };
+
+    const handleRemoveWelcomeScreen = async () => {
+        if (!window.confirm("Welcome screen photo remove karni hai?")) {
+            return;
+        }
+
+        try {
+            setWelcomeSaving(true);
+            setWelcomeMessage("");
+
+            const { error } = await supabase
+                .from("site_settings")
+                .upsert(
+                    {
+                        setting_key: "welcome_screen",
+                        setting_value: { image_url: "" },
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "setting_key" }
+                );
+
+            if (error) throw error;
+
+            setWelcomeImageUrl("");
+            setWelcomeFile(null);
+            setWelcomePreview("");
+
+            if (welcomeFileInputRef.current) {
+                welcomeFileInputRef.current.value = "";
+            }
+
+            setWelcomeMessage("Welcome photo remove ho gayi ✅");
+        } catch (error) {
+            console.error("WELCOME SCREEN REMOVE ERROR:", error);
+            setWelcomeMessage(`Remove nahi hui ❌ ${error.message}`);
+        } finally {
+            setWelcomeSaving(false);
+        }
+    };
+
+    // =====================================================
     // STATS
-    // ======================================================
+    // =====================================================
 
     const totalProducts = products.length;
+    const activeProducts = products.filter((p) => p.is_active).length;
+    const outOfStock = products.filter((p) => Number(p.stock) <= 0).length;
+    const activeBanners = banners.filter((b) => b.is_active).length;
 
-    const activeProducts = products.filter(
-        (product) => product.is_active
-    ).length;
+    const mediaPreview = navbarMediaPreview || navbarMediaUrl;
+    const currentWelcomePreview = welcomePreview || welcomeImageUrl;
 
-    const outOfStock = products.filter(
-        (product) =>
-            Number(product.stock) <= 0
-    ).length;
-
-    const activeBanners = banners.filter(
-        (banner) => banner.is_active
-    ).length;
-
-    // ======================================================
+    // =====================================================
     // UI
-    // ======================================================
+    // =====================================================
 
     return (
-        <div className="min-h-screen bg-gray-100">
-
-            {/* ==================================================
-                HEADER
-            ================================================== */}
-
-            <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-
-                <div className="max-w-[1800px] mx-auto px-4 py-3">
-
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-
-                        <div>
-                            <h1 className="text-xl font-black text-gray-900">
-                                Apna Mart Admin
-                            </h1>
-
-                            <p className="text-xs text-gray-500">
-                                Products, banners & store management
-                            </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-
-                            <button
-                                onClick={() =>
-                                    navigate("/admin/orders")
-                                }
-                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold"
-                            >
-                                📦 Orders
-                            </button>
-
-                            <button
-                                onClick={() =>
-                                    navigate("/")
-                                }
-                                className="px-3 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-xs font-bold"
-                            >
-                                🏪 View Store
-                            </button>
-
-                        </div>
-
+        <div className="min-h-screen bg-gray-100 text-gray-900">
+            <header className="sticky top-0 z-40 border-b bg-white">
+                <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h1 className="text-xl font-black">Apna Mart Admin</h1>
+                        <p className="text-xs text-gray-500">
+                            Products, banners and store management
+                        </p>
                     </div>
 
-                </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => navigate("/admin/orders")}
+                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                        >
+                            📦 Orders
+                        </button>
 
+                        <button
+                            onClick={() => navigate("/")}
+                            className="rounded-lg bg-gray-800 px-3 py-2 text-xs font-bold text-white hover:bg-gray-900"
+                        >
+                            🏪 View Store
+                        </button>
+                    </div>
+                </div>
             </header>
 
-            <main className="max-w-[1800px] mx-auto px-3 sm:px-4 py-4">
-
-                {/* ==================================================
-                    QUICK STATS
-                ================================================== */}
-
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
-
-                    <div className="bg-white rounded-xl border border-gray-200 p-3">
-                        <p className="text-[11px] text-gray-500">
-                            Total Products
-                        </p>
-
-                        <p className="text-xl font-black text-gray-900">
-                            {totalProducts}
-                        </p>
-                    </div>
-
-                    <div className="bg-white rounded-xl border border-gray-200 p-3">
-                        <p className="text-[11px] text-gray-500">
-                            Active Products
-                        </p>
-
-                        <p className="text-xl font-black text-green-600">
-                            {activeProducts}
-                        </p>
-                    </div>
-
-                    <div className="bg-white rounded-xl border border-gray-200 p-3">
-                        <p className="text-[11px] text-gray-500">
-                            Out of Stock
-                        </p>
-
-                        <p className="text-xl font-black text-red-600">
-                            {outOfStock}
-                        </p>
-                    </div>
-
-                    <div className="bg-white rounded-xl border border-gray-200 p-3">
-                        <p className="text-[11px] text-gray-500">
-                            Active Banners
-                        </p>
-
-                        <p className="text-xl font-black text-blue-600">
-                            {activeBanners}
-                        </p>
-                    </div>
-
+            <main className="mx-auto max-w-[1800px] space-y-4 px-3 py-4 sm:px-4">
+                {/* STATS */}
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    {[
+                        ["Total Products", totalProducts, "text-gray-900"],
+                        ["Active Products", activeProducts, "text-green-600"],
+                        ["Out of Stock", outOfStock, "text-red-600"],
+                        ["Active Banners", activeBanners, "text-blue-600"],
+                    ].map(([label, value, color]) => (
+                        <div
+                            key={label}
+                            className="rounded-xl border bg-white p-4"
+                        >
+                            <p className="text-xs text-gray-500">{label}</p>
+                            <p className={`text-2xl font-black ${color}`}>
+                                {value}
+                            </p>
+                        </div>
+                    ))}
                 </div>
 
-                {/* ==================================================
-                    PRODUCT FORM
-                ================================================== */}
+                {/* WELCOME SCREEN MANAGER */}
+                <section className="overflow-hidden rounded-xl border bg-white">
+                    <div className="border-b px-4 py-3">
+                        <h2 className="font-black">
+                            🌟 Welcome Screen Manager
+                        </h2>
+                        <p className="mt-1 text-xs text-gray-500">
+                            App open hone par dikhne wali welcome photo manage karo.
+                        </p>
+                    </div>
 
-                <section className="bg-white rounded-xl border border-gray-200 mb-4">
+                    <div className="grid gap-5 p-4 lg:grid-cols-2">
+                        <div className="space-y-3">
+                            <div>
+                                <label className="admin-label">
+                                    Upload Welcome Photo / GIF
+                                </label>
+                                <input
+                                    ref={welcomeFileInputRef}
+                                    type="file"
+                                    accept="image/*,.gif"
+                                    onChange={handleWelcomeFileChange}
+                                    className="block w-full rounded-lg border border-gray-300 p-3 text-xs"
+                                />
+                                <p className="mt-1 text-[11px] text-gray-500">
+                                    JPG, PNG, WEBP ya GIF — maximum 5MB.
+                                </p>
+                            </div>
 
-                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                            <div>
+                                <label className="admin-label">
+                                    Public Image URL
+                                </label>
+                                <input
+                                    type="url"
+                                    value={welcomeImageUrl}
+                                    onChange={(event) => {
+                                        setWelcomeImageUrl(event.target.value);
+                                        setWelcomeFile(null);
+                                        setWelcomePreview("");
+
+                                        if (welcomeFileInputRef.current) {
+                                            welcomeFileInputRef.current.value = "";
+                                        }
+                                    }}
+                                    placeholder="https://example.com/welcome.jpg"
+                                    className="admin-input"
+                                />
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleSaveWelcomeScreen}
+                                    disabled={welcomeSaving || welcomeLoading}
+                                    className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {welcomeSaving ? "Saving..." : "💾 Save Welcome Photo"}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveWelcomeScreen}
+                                    disabled={
+                                        welcomeSaving ||
+                                        (!welcomeImageUrl && !welcomeFile && !welcomePreview)
+                                    }
+                                    className="rounded-lg bg-red-100 px-4 py-2.5 text-xs font-black text-red-700 hover:bg-red-200 disabled:opacity-50"
+                                >
+                                    Remove Photo
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={fetchWelcomeScreen}
+                                    disabled={welcomeLoading || welcomeSaving}
+                                    className="rounded-lg bg-gray-100 px-4 py-2.5 text-xs font-bold hover:bg-gray-200 disabled:opacity-50"
+                                >
+                                    {welcomeLoading ? "Loading..." : "↻ Refresh"}
+                                </button>
+                            </div>
+
+                            {welcomeMessage && (
+                                <p className="break-words rounded-lg bg-gray-50 p-3 text-xs">
+                                    {welcomeMessage}
+                                </p>
+                            )}
+                        </div>
 
                         <div>
-                            <h2 className="text-sm font-black text-gray-900">
-                                {editingId
-                                    ? "✏️ Edit Product"
-                                    : "➕ Add Product"}
-                            </h2>
+                            <p className="mb-2 text-xs font-black text-gray-700">
+                                Welcome Screen Preview
+                            </p>
+                            <div className="flex min-h-48 items-center justify-center overflow-hidden rounded-xl border bg-gray-900">
+                                {currentWelcomePreview ? (
+                                    <img
+                                        src={currentWelcomePreview}
+                                        alt="Welcome screen preview"
+                                        className="h-64 w-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="p-8 text-center text-sm text-white">
+                                        <div className="mb-2 text-3xl">🖼️</div>
+                                        Abhi welcome photo set nahi hai.
+                                    </div>
+                                )}
+                            </div>
+                            <p className="mt-2 text-[11px] text-gray-500">
+                                Photo select karo, preview dekho aur Save dabao.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* NAVBAR BACKGROUND MANAGER */}
+                <section className="overflow-hidden rounded-xl border bg-white">
+                    <div className="border-b px-4 py-3">
+                        <h2 className="font-black">🎨 Navbar Background Manager</h2>
+                        <p className="mt-1 text-xs text-gray-500">
+                            Store ke Navbar ke liye image, GIF ya video select karo.
+                        </p>
+                    </div>
+
+                    <div className="grid gap-5 p-4 lg:grid-cols-2">
+                        <div className="space-y-3">
+                            <label className="admin-label">Background Type</label>
+                            <select
+                                value={navbarMediaType}
+                                onChange={(event) => {
+                                    setNavbarMediaType(event.target.value);
+                                    setNavbarMediaFile(null);
+                                    setNavbarMediaPreview("");
+
+                                    if (navbarFileInputRef.current) {
+                                        navbarFileInputRef.current.value = "";
+                                    }
+                                }}
+                                className="admin-input"
+                            >
+                                <option value="image">Image / GIF</option>
+                                <option value="video">Video</option>
+                            </select>
+
+                            <label className="admin-label">
+                                Upload {navbarMediaType === "video" ? "Video" : "Image / GIF"}
+                            </label>
+
+                            <input
+                                ref={navbarFileInputRef}
+                                type="file"
+                                accept={
+                                    navbarMediaType === "video"
+                                        ? "video/mp4,video/webm,video/ogg"
+                                        : "image/*,.gif"
+                                }
+                                onChange={handleNavbarMediaChange}
+                                className="block w-full rounded-lg border border-gray-300 p-3 text-xs"
+                            />
 
                             <p className="text-[11px] text-gray-500">
-                                Product information
+                                {navbarMediaType === "video"
+                                    ? "MP4, WEBM or OGG • Maximum 25MB"
+                                    : "JPG, PNG, WEBP or GIF • Maximum 5MB"}
                             </p>
+
+                            <div>
+                                <label className="admin-label">
+                                    Optional: Existing Public Media URL
+                                </label>
+                                <input
+                                    type="url"
+                                    value={navbarMediaUrl}
+                                    onChange={(event) => {
+                                        setNavbarMediaUrl(event.target.value);
+                                        setNavbarMediaFile(null);
+                                        setNavbarMediaPreview("");
+                                    }}
+                                    placeholder="https://..."
+                                    className="admin-input"
+                                />
+                                <p className="mt-1 text-[10px] text-gray-500">
+                                    URL enter karne par selected file ki jagah URL save hoga.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={handleSaveNavbarMedia}
+                                    disabled={navbarMediaSaving || navbarMediaLoading}
+                                    className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {navbarMediaSaving ? "Saving..." : "💾 Save Navbar Background"}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveNavbarMedia}
+                                    disabled={
+                                        navbarMediaSaving ||
+                                        (!navbarMediaUrl && !navbarMediaFile && !navbarMediaPreview)
+                                    }
+                                    className="rounded-lg bg-red-100 px-4 py-2.5 text-xs font-black text-red-700 hover:bg-red-200 disabled:opacity-50"
+                                >
+                                    Remove Background
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={fetchNavbarMedia}
+                                    disabled={navbarMediaLoading}
+                                    className="rounded-lg bg-gray-100 px-4 py-2.5 text-xs font-bold hover:bg-gray-200 disabled:opacity-50"
+                                >
+                                    {navbarMediaLoading ? "Loading..." : "↻ Reload"}
+                                </button>
+                            </div>
+
+                            {navbarMediaMessage && (
+                                <p className="break-words rounded-lg bg-gray-50 p-3 text-xs">
+                                    {navbarMediaMessage}
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-xs font-black text-gray-700">
+                                Background Preview
+                            </p>
+                            <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded-xl border bg-gray-900">
+                                {mediaPreview && navbarMediaType === "video" ? (
+                                    <video
+                                        key={mediaPreview}
+                                        src={mediaPreview}
+                                        autoPlay
+                                        muted
+                                        loop
+                                        playsInline
+                                        className="h-48 w-full object-cover"
+                                    />
+                                ) : mediaPreview ? (
+                                    <img
+                                        src={mediaPreview}
+                                        alt="Navbar background preview"
+                                        className="h-48 w-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="p-8 text-center text-sm text-white">
+                                        <div className="mb-2 text-3xl">🖼️</div>
+                                        No background selected
+                                    </div>
+                                )}
+
+                                {mediaPreview && (
+                                    <div className="absolute inset-x-0 bottom-0 bg-black/50 p-3 text-sm font-bold text-white">
+                                        Apna Mart Navbar Preview
+                                    </div>
+                                )}
+                            </div>
+                            <p className="mt-2 text-[11px] text-gray-500">
+                                Navbar par apply karne ke liye Navbar.jsx mein saved setting load karna bhi zaroori hai.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* PRODUCT FORM */}
+                <section className="rounded-xl border bg-white">
+                    <div className="flex items-center justify-between border-b px-4 py-3">
+                        <div>
+                            <h2 className="text-sm font-black">
+                                {editingId ? "✏️ Edit Product" : "➕ Add Product"}
+                            </h2>
+                            <p className="text-xs text-gray-500">Product information</p>
                         </div>
 
                         {editingId && (
                             <button
                                 onClick={resetForm}
-                                className="text-xs font-bold text-gray-600 hover:text-red-600"
+                                className="text-xs font-bold text-red-600"
                             >
-                                ✕ Cancel Edit
+                                Cancel Edit
                             </button>
                         )}
-
                     </div>
 
                     <form
-                        onSubmit={
-                            handleProductSubmit
-                        }
-                        className="p-4"
+                        onSubmit={handleProductSubmit}
+                        className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"
                     >
+                        <Field label="Product Name *">
+                            <input name="name" value={form.name} onChange={handleProductChange} required className="admin-input" placeholder="Product name" />
+                        </Field>
+                        <Field label="Price *">
+                            <input name="price" type="number" min="0" step="any" value={form.price} onChange={handleProductChange} required className="admin-input" placeholder="₹" />
+                        </Field>
+                        <Field label="Offer Price">
+                            <input name="offer_price" type="number" min="0" step="any" value={form.offer_price} onChange={handleProductChange} className="admin-input" placeholder="₹" />
+                        </Field>
+                        <Field label="Category">
+                            <input name="category" value={form.category} onChange={handleProductChange} className="admin-input" list="product-categories" placeholder="Category" />
+                            <datalist id="product-categories">
+                                {categories.map((category) => (
+                                    <option key={category} value={category} />
+                                ))}
+                            </datalist>
+                        </Field>
+                        <Field label="Stock *">
+                            <input name="stock" type="number" min="0" value={form.stock} onChange={handleProductChange} required className="admin-input" placeholder="0" />
+                        </Field>
+                        <Field label="Weight">
+                            <input name="weight" value={form.weight} onChange={handleProductChange} className="admin-input" placeholder="1 kg" />
+                        </Field>
+                        <Field label="Image URL">
+                            <input name="image_url" value={form.image_url} onChange={handleProductChange} className="admin-input" placeholder="https://..." />
+                        </Field>
+                        <Field label="Description">
+                            <input name="description" value={form.description} onChange={handleProductChange} className="admin-input" placeholder="Short description" />
+                        </Field>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2.5">
+                        <label className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold">
+                            <input type="checkbox" name="is_active" checked={form.is_active} onChange={handleProductChange} />
+                            Active product
+                        </label>
 
-                            <div className="xl:col-span-2">
-                                <label className="admin-label">
-                                    Product Name *
-                                </label>
-
-                                <input
-                                    name="name"
-                                    value={form.name}
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="Product name"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="admin-label">
-                                    Price *
-                                </label>
-
-                                <input
-                                    name="price"
-                                    type="number"
-                                    min="0"
-                                    value={form.price}
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="₹"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="admin-label">
-                                    Offer Price
-                                </label>
-
-                                <input
-                                    name="offer_price"
-                                    type="number"
-                                    min="0"
-                                    value={
-                                        form.offer_price
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="₹"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="admin-label">
-                                    Category
-                                </label>
-
-                                <input
-                                    name="category"
-                                    value={
-                                        form.category
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="Category"
-                                    className="admin-input"
-                                    list="product-categories"
-                                />
-
-                                <datalist id="product-categories">
-                                    {categories.map(
-                                        (category) => (
-                                            <option
-                                                key={
-                                                    category
-                                                }
-                                                value={
-                                                    category
-                                                }
-                                            />
-                                        )
-                                    )}
-                                </datalist>
-                            </div>
-
-                            <div>
-                                <label className="admin-label">
-                                    Stock *
-                                </label>
-
-                                <input
-                                    name="stock"
-                                    type="number"
-                                    min="0"
-                                    value={
-                                        form.stock
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="0"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="admin-label">
-                                    Weight
-                                </label>
-
-                                <input
-                                    name="weight"
-                                    value={
-                                        form.weight
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="1 kg"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div className="xl:col-span-2">
-                                <label className="admin-label">
-                                    Image URL
-                                </label>
-
-                                <input
-                                    name="image_url"
-                                    value={
-                                        form.image_url
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="https://..."
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div className="sm:col-span-2 lg:col-span-2 xl:col-span-3">
-                                <label className="admin-label">
-                                    Description
-                                </label>
-
-                                <input
-                                    name="description"
-                                    value={
-                                        form.description
-                                    }
-                                    onChange={
-                                        handleProductChange
-                                    }
-                                    placeholder="Short description"
-                                    className="admin-input"
-                                />
-                            </div>
-
-                            <div className="flex items-end">
-
-                                <label className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 w-full cursor-pointer h-[38px]">
-
-                                    <input
-                                        type="checkbox"
-                                        name="is_active"
-                                        checked={
-                                            form.is_active
-                                        }
-                                        onChange={
-                                            handleProductChange
-                                        }
-                                        className="accent-green-600"
-                                    />
-
-                                    <span className="text-xs font-bold">
-                                        Active
-                                    </span>
-
-                                </label>
-
-                            </div>
-
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mt-3">
-
-                            <button
-                                type="submit"
-                                disabled={saving}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-black"
-                            >
-                                {saving
-                                    ? "Saving..."
-                                    : editingId
-                                        ? "💾 Update Product"
-                                        : "➕ Add Product"}
+                        <div className="flex flex-wrap items-end gap-2">
+                            <button disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                                {saving ? "Saving..." : editingId ? "Update Product" : "Add Product"}
                             </button>
-
                             {editingId && (
-                                <button
-                                    type="button"
-                                    onClick={resetForm}
-                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs font-bold"
-                                >
+                                <button type="button" onClick={resetForm} className="rounded-lg bg-gray-100 px-4 py-2.5 text-xs font-bold">
                                     Cancel
                                 </button>
                             )}
-
                         </div>
-
                     </form>
-
                 </section>
 
-                {/* ==================================================
-                    CSV UPLOAD
-                ================================================== */}
+                {/* CSV UPLOAD */}
+                <section className="flex flex-col gap-3 rounded-xl border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="text-sm font-black">📄 Bulk CSV Upload</h2>
+                        <p className="mt-1 text-[11px] text-gray-500">
+                            Columns: name, price, offer_price, category, description, stock, weight, image_url, is_active
+                        </p>
+                    </div>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={handleCSVUpload}
+                        className="block max-w-full text-xs"
+                    />
+                    {bulkUploading && (
+                        <span className="text-xs font-bold">Uploading CSV...</span>
+                    )}
+                </section>
 
-                <section className="bg-white rounded-xl border border-gray-200 p-3 mb-4">
-
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-                        <div>
-                            <h2 className="text-sm font-black">
-                                📄 Bulk CSV Upload
-                            </h2>
-
-                            <p className="text-[10px] text-gray-500 mt-0.5">
-                                Columns: name, price, offer_price, category,
-                                description, stock, weight, image_url, is_active
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                fileInputRef.current?.click()
-                            }
-                            disabled={
-                                bulkUploading
-                            }
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold"
-                        >
-                            {bulkUploading
-                                ? "Uploading..."
-                                : "📤 Upload CSV"}
-                        </button>
-
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv,text/csv"
-                            onChange={
-                                handleCSVUpload
-                            }
-                            className="hidden"
-                        />
-
+                {/* BANNER MANAGEMENT */}
+                <section className="overflow-hidden rounded-xl border bg-white">
+                    <div className="border-b px-4 py-3">
+                        <h2 className="text-sm font-black">🖼️ Banner Management</h2>
+                        <p className="text-xs text-gray-500">Gallery image or Image URL</p>
                     </div>
 
-                </section>
+                    <form onSubmit={handleBannerSubmit} className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <Field label="Upload Banner Image">
+                            <input ref={bannerFileInputRef} type="file" accept="image/*" onChange={handleBannerFileChange} className="block w-full text-xs" />
+                            <p className="mt-1 text-[10px] text-gray-500">Maximum 5MB</p>
+                        </Field>
 
-                {/* ==================================================
-                    BANNER MANAGEMENT
-                ================================================== */}
+                        <Field label="Image URL">
+                            <input name="image_url" value={bannerForm.image_url} onChange={handleBannerChange} className="admin-input" placeholder="https://..." />
+                        </Field>
 
-                <section className="bg-white rounded-xl border border-gray-200 mb-4">
+                        <Field label="Banner Link">
+                            <input name="link_url" value={bannerForm.link_url} onChange={handleBannerChange} className="admin-input" placeholder="/products..." />
+                        </Field>
 
-                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <Field label="Sort Order">
+                            <input name="sort_order" type="number" value={bannerForm.sort_order} onChange={handleBannerChange} className="admin-input" />
+                        </Field>
 
-                        <div>
-                            <h2 className="text-sm font-black">
-                                🖼️ Banner Management
-                            </h2>
+                        <label className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold">
+                            <input type="checkbox" name="is_active" checked={bannerForm.is_active} onChange={handleBannerChange} />
+                            Active banner
+                        </label>
 
-                            <p className="text-[11px] text-gray-500">
-                                Gallery image ya Image URL use kar sakte ho
-                            </p>
-                        </div>
-
-                        {editingBannerId && (
-                            <button
-                                onClick={
-                                    resetBannerForm
-                                }
-                                className="text-xs font-bold text-gray-600 hover:text-red-600"
-                            >
-                                ✕ Cancel Edit
-                            </button>
+                        {(bannerPreview || bannerForm.image_url) && (
+                            <div className="sm:col-span-2 lg:col-span-3">
+                                <img src={bannerPreview || bannerForm.image_url} alt="Banner preview" className="h-36 w-full rounded-lg border object-cover" />
+                            </div>
                         )}
 
-                    </div>
-
-                    <form
-                        onSubmit={
-                            handleBannerSubmit
-                        }
-                        className="p-4"
-                    >
-
-                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-
-                            {/* GALLERY */}
-
-                            <div className="lg:col-span-2">
-
-                                <label className="admin-label">
-                                    Banner Image
-                                </label>
-
-                                <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
-
-                                    <input
-                                        ref={
-                                            bannerFileInputRef
-                                        }
-                                        id="banner-file-input"
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={
-                                            handleBannerFileChange
-                                        }
-                                        className="block w-full text-xs"
-                                    />
-
-                                    <p className="text-[10px] text-gray-500 mt-2">
-                                        Maximum 5MB • JPG, PNG, WEBP etc.
-                                    </p>
-
-                                    {(bannerPreview ||
-                                        bannerForm.image_url) && (
-                                            <div className="mt-3">
-
-                                                <img
-                                                    src={
-                                                        bannerPreview ||
-                                                        bannerForm.image_url
-                                                    }
-                                                    alt="Banner Preview"
-                                                    className="w-full h-32 object-cover rounded-lg border"
-                                                />
-
-                                            </div>
-                                        )}
-
-                                </div>
-
-                            </div>
-
-                            {/* URL */}
-
-                            <div>
-
-                                <label className="admin-label">
-                                    Image URL
-                                </label>
-
-                                <input
-                                    name="image_url"
-                                    value={
-                                        bannerForm.image_url
-                                    }
-                                    onChange={
-                                        handleBannerChange
-                                    }
-                                    placeholder="https://..."
-                                    className="admin-input"
-                                />
-
-                                <p className="text-[10px] text-gray-500 mt-1">
-                                    Gallery select karoge to gallery image priority hogi.
-                                </p>
-
-                            </div>
-
-                            {/* LINK */}
-
-                            <div>
-
-                                <label className="admin-label">
-                                    Banner Link
-                                </label>
-
-                                <input
-                                    name="link_url"
-                                    value={
-                                        bannerForm.link_url
-                                    }
-                                    onChange={
-                                        handleBannerChange
-                                    }
-                                    placeholder="/products?category=..."
-                                    className="admin-input"
-                                />
-
-                                <p className="text-[10px] text-gray-500 mt-1">
-                                    Optional
-                                </p>
-
-                            </div>
-
-                            {/* SORT */}
-
-                            <div>
-
-                                <label className="admin-label">
-                                    Sort Order
-                                </label>
-
-                                <input
-                                    name="sort_order"
-                                    type="number"
-                                    value={
-                                        bannerForm.sort_order
-                                    }
-                                    onChange={
-                                        handleBannerChange
-                                    }
-                                    className="admin-input"
-                                />
-
-                            </div>
-
-                            {/* ACTIVE */}
-
-                            <div className="flex items-end">
-
-                                <label className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 w-full cursor-pointer h-[38px]">
-
-                                    <input
-                                        type="checkbox"
-                                        name="is_active"
-                                        checked={
-                                            bannerForm.is_active
-                                        }
-                                        onChange={
-                                            handleBannerChange
-                                        }
-                                        className="accent-green-600"
-                                    />
-
-                                    <span className="text-xs font-bold">
-                                        Active Banner
-                                    </span>
-
-                                </label>
-
-                            </div>
-
-                        </div>
-
-                        <div className="flex gap-2 mt-3">
-
-                            <button
-                                type="submit"
-                                disabled={
-                                    bannerSaving
-                                }
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-black"
-                            >
-                                {bannerSaving
-                                    ? "Saving..."
-                                    : editingBannerId
-                                        ? "💾 Update Banner"
-                                        : "➕ Add Banner"}
+                        <div className="flex flex-wrap items-end gap-2">
+                            <button disabled={bannerSaving} className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                                {bannerSaving ? "Saving..." : editingBannerId ? "Update Banner" : "Add Banner"}
                             </button>
-
                             {editingBannerId && (
-                                <button
-                                    type="button"
-                                    onClick={
-                                        resetBannerForm
-                                    }
-                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold"
-                                >
+                                <button type="button" onClick={resetBannerForm} className="rounded-lg bg-gray-100 px-4 py-2.5 text-xs font-bold">
                                     Cancel
                                 </button>
                             )}
-
                         </div>
-
                     </form>
 
-                    {/* EXISTING BANNERS */}
-
-                    <div className="border-t border-gray-200 p-4">
-
-                        <div className="flex items-center justify-between mb-3">
-
-                            <h3 className="text-xs font-black">
-                                Existing Banners
-                            </h3>
-
-                            <span className="text-[10px] text-gray-500">
-                                {banners.length} banners
-                            </span>
-
+                    <div className="border-t p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h3 className="text-xs font-black">Existing Banners</h3>
+                            <button onClick={fetchBanners} className="text-xs font-bold text-blue-600">Refresh</button>
                         </div>
 
                         {bannerLoading ? (
-                            <div className="text-xs text-gray-500 py-5 text-center">
-                                Loading banners...
-                            </div>
+                            <p className="py-6 text-center text-xs text-gray-500">Loading banners...</p>
                         ) : banners.length === 0 ? (
-                            <div className="text-xs text-gray-500 py-5 text-center border border-dashed rounded-lg">
-                                No banners added yet.
-                            </div>
+                            <p className="rounded-lg border border-dashed p-6 text-center text-xs text-gray-500">No banners added yet.</p>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-
-                                {banners.map(
-                                    (banner) => (
-                                        <div
-                                            key={
-                                                banner.id
-                                            }
-                                            className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50"
-                                        >
-
-                                            <div className="relative h-28">
-
-                                                <img
-                                                    src={
-                                                        banner.image_url
-                                                    }
-                                                    alt="Banner"
-                                                    className="w-full h-full object-cover"
-                                                />
-
-                                                <span
-                                                    className={`absolute top-2 right-2 px-2 py-1 rounded-md text-[9px] font-black ${banner.is_active
-                                                            ? "bg-green-600 text-white"
-                                                            : "bg-gray-700 text-white"
-                                                        }`}
-                                                >
-                                                    {banner.is_active
-                                                        ? "ACTIVE"
-                                                        : "OFF"}
-                                                </span>
-
-                                            </div>
-
-                                            <div className="p-2.5">
-
-                                                <div className="flex items-center justify-between mb-2">
-
-                                                    <span className="text-[10px] text-gray-500">
-                                                        Order:{" "}
-                                                        {
-                                                            banner.sort_order
-                                                        }
-                                                    </span>
-
-                                                    {banner.link_url && (
-                                                        <span className="text-[9px] text-blue-600 truncate max-w-[150px]">
-                                                            🔗 Link
-                                                        </span>
-                                                    )}
-
-                                                </div>
-
-                                                <div className="grid grid-cols-3 gap-1.5">
-
-                                                    <button
-                                                        onClick={() =>
-                                                            handleEditBanner(
-                                                                banner
-                                                            )
-                                                        }
-                                                        className="bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md py-1.5 text-[10px] font-bold"
-                                                    >
-                                                        ✏️ Edit
-                                                    </button>
-
-                                                    <button
-                                                        onClick={() =>
-                                                            handleToggleBanner(
-                                                                banner
-                                                            )
-                                                        }
-                                                        className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-md py-1.5 text-[10px] font-bold"
-                                                    >
-                                                        {banner.is_active
-                                                            ? "⏸ Off"
-                                                            : "▶ On"}
-                                                    </button>
-
-                                                    <button
-                                                        onClick={() =>
-                                                            handleDeleteBanner(
-                                                                banner.id
-                                                            )
-                                                        }
-                                                        className="bg-red-100 text-red-700 hover:bg-red-200 rounded-md py-1.5 text-[10px] font-bold"
-                                                    >
-                                                        🗑️
-                                                    </button>
-
-                                                </div>
-
-                                            </div>
-
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                {banners.map((banner) => (
+                                    <article key={banner.id} className="overflow-hidden rounded-xl border bg-gray-50">
+                                        <div className="relative h-32">
+                                            <img src={banner.image_url} alt="Banner" className="h-full w-full object-cover" />
+                                            <span className={`absolute right-2 top-2 rounded px-2 py-1 text-[9px] font-black text-white ${banner.is_active ? "bg-green-600" : "bg-gray-700"}`}>
+                                                {banner.is_active ? "ACTIVE" : "OFF"}
+                                            </span>
                                         </div>
-                                    )
-                                )}
-
+                                        <div className="p-3">
+                                            <p className="mb-2 text-xs text-gray-500">Order: {banner.sort_order}</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <button onClick={() => handleEditBanner(banner)} className="rounded bg-blue-100 py-2 text-[10px] font-bold text-blue-700">Edit</button>
+                                                <button onClick={() => handleToggleBanner(banner)} className="rounded bg-yellow-100 py-2 text-[10px] font-bold text-yellow-800">{banner.is_active ? "Off" : "On"}</button>
+                                                <button onClick={() => handleDeleteBanner(banner.id)} className="rounded bg-red-100 py-2 text-[10px] font-bold text-red-700">Delete</button>
+                                            </div>
+                                        </div>
+                                    </article>
+                                ))}
                             </div>
                         )}
-
                     </div>
-
                 </section>
 
-                {/* ==================================================
-                    PRODUCTS
-                ================================================== */}
-
-                <section className="bg-white rounded-xl border border-gray-200">
-
-                    {/* PRODUCTS HEADER */}
-
-                    <div className="p-3 border-b border-gray-200">
-
-                        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-
+                {/* ALL PRODUCTS */}
+                <section className="overflow-hidden rounded-xl border bg-white">
+                    <div className="space-y-3 border-b p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
-                                <h2 className="text-sm font-black text-gray-900">
-                                    All Products
-                                </h2>
-
-                                <p className="text-[10px] text-gray-500">
-                                    Showing{" "}
-                                    {
-                                        filteredProducts.length
-                                    }{" "}
-                                    /{" "}
-                                    {
-                                        products.length
-                                    }
+                                <h2 className="text-sm font-black">All Products</h2>
+                                <p className="text-[11px] text-gray-500">
+                                    Showing {filteredProducts.length} / {products.length}
                                 </p>
                             </div>
-
-                            <div className="flex flex-wrap gap-2">
-
-                                {/* SEARCH */}
-
-                                <input
-                                    type="text"
-                                    value={
-                                        productSearch
-                                    }
-                                    onChange={(e) =>
-                                        setProductSearch(
-                                            e.target.value
-                                        )
-                                    }
-                                    placeholder="🔍 Search..."
-                                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48"
-                                />
-
-                                {/* CATEGORY */}
-
-                                <select
-                                    value={
-                                        categoryFilter
-                                    }
-                                    onChange={(e) =>
-                                        setCategoryFilter(
-                                            e.target.value
-                                        )
-                                    }
-                                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs outline-none bg-white"
-                                >
-
-                                    <option value="all">
-                                        All Categories
-                                    </option>
-
-                                    {categories.map(
-                                        (category) => (
-                                            <option
-                                                key={
-                                                    category
-                                                }
-                                                value={
-                                                    category
-                                                }
-                                            >
-                                                {category}
-                                            </option>
-                                        )
-                                    )}
-
-                                </select>
-
-                                {/* SELECT ALL */}
-
-                                <button
-                                    onClick={
-                                        handleSelectAllProducts
-                                    }
-                                    disabled={
-                                        filteredProducts.length ===
-                                        0
-                                    }
-                                    className="bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap"
-                                >
-                                    ☑ Select 50
-                                </button>
-
-                                {/* DELETE */}
-
-                                <button
-                                    onClick={
-                                        handleBulkDelete
-                                    }
-                                    disabled={
-                                        selectedProducts.length ===
-                                        0 ||
-                                        saving
-                                    }
-                                    className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap"
-                                >
-                                    🗑️ Delete (
-                                    {
-                                        selectedProducts.length
-                                    }
-                                    )
-                                </button>
-
-                                {/* REFRESH */}
-
-                                <button
-                                    onClick={
-                                        fetchProducts
-                                    }
-                                    disabled={
-                                        loading
-                                    }
-                                    className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-200 px-3 py-2 rounded-lg text-xs font-bold"
-                                    title="Refresh"
-                                >
-                                    🔄
-                                </button>
-
-                            </div>
-
+                            <button onClick={fetchProducts} disabled={loading} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold">
+                                ↻ Refresh
+                            </button>
                         </div>
 
-                        {/* SELECTION INFO */}
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products..." className="admin-input" />
+                            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="admin-input">
+                                <option value="all">All Categories</option>
+                                {categories.map((category) => (
+                                    <option key={category} value={category}>{category}</option>
+                                ))}
+                            </select>
+                            <button onClick={handleSelectAllProducts} disabled={!filteredProducts.length} className="rounded-lg bg-gray-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                                ☑ Select visible (max 50)
+                            </button>
+                            <button onClick={handleBulkDelete} disabled={!selectedProducts.length || saving} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                                🗑 Delete selected ({selectedProducts.length})
+                            </button>
+                        </div>
 
-                        {selectedProducts.length >
-                            0 && (
-                                <div className="mt-2 flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-
-                                    <p className="text-[10px] font-black text-red-700">
-                                        ⚠️{" "}
-                                        {
-                                            selectedProducts.length
-                                        }
-                                        /50 products selected
-                                    </p>
-
-                                    <button
-                                        onClick={() =>
-                                            setSelectedProducts(
-                                                []
-                                            )
-                                        }
-                                        className="text-[10px] font-bold text-red-600 hover:underline"
-                                    >
-                                        Clear Selection
-                                    </button>
-
-                                </div>
-                            )}
-
-                    </div>
-
-                    {/* PRODUCT LIST */}
-
-                    <div className="p-3">
-
-                        {loading ? (
-                            <div className="py-10 text-center text-xs text-gray-500">
-                                Loading products...
-                            </div>
-                        ) : filteredProducts.length ===
-                            0 ? (
-                            <div className="py-10 text-center border border-dashed border-gray-300 rounded-xl">
-
-                                <p className="text-sm font-bold text-gray-600">
-                                    No products found
-                                </p>
-
-                                <p className="text-[10px] text-gray-400 mt-1">
-                                    Search/category filter change karke dekho.
-                                </p>
-
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5">
-
-                                {filteredProducts.map(
-                                    (product) => {
-
-                                        const isSelected =
-                                            selectedProducts.some(
-                                                (id) =>
-                                                    String(
-                                                        id
-                                                    ) ===
-                                                    String(
-                                                        product.id
-                                                    )
-                                            );
-
-                                        const displayPrice =
-                                            product.offer_price !==
-                                                null &&
-                                                product.offer_price !==
-                                                undefined &&
-                                                product.offer_price !==
-                                                ""
-                                                ? product.offer_price
-                                                : product.price;
-
-                                        return (
-                                            <div
-                                                key={
-                                                    product.id
-                                                }
-                                                className={`relative border rounded-xl overflow-hidden bg-white transition ${isSelected
-                                                        ? "border-red-500 ring-2 ring-red-100"
-                                                        : "border-gray-200 hover:shadow-md"
-                                                    }`}
-                                            >
-
-                                                {/* CHECKBOX */}
-
-                                                <div className="absolute top-1.5 left-1.5 z-20 bg-white rounded-md shadow-sm p-0.5">
-
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            isSelected
-                                                        }
-                                                        onChange={() =>
-                                                            handleSelectProduct(
-                                                                product.id
-                                                            )
-                                                        }
-                                                        className="w-4 h-4 cursor-pointer accent-red-600"
-                                                        title="Select product"
-                                                    />
-
-                                                </div>
-
-                                                {/* STATUS */}
-
-                                                <span
-                                                    className={`absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded text-[8px] font-black ${product.is_active
-                                                            ? "bg-green-600 text-white"
-                                                            : "bg-gray-700 text-white"
-                                                        }`}
-                                                >
-                                                    {product.is_active
-                                                        ? "ON"
-                                                        : "OFF"}
-                                                </span>
-
-                                                {/* IMAGE */}
-
-                                                <div className="h-28 bg-gray-50">
-
-                                                    {product.image_url ? (
-                                                        <img
-                                                            src={
-                                                                product.image_url
-                                                            }
-                                                            alt={
-                                                                product.name
-                                                            }
-                                                            loading="lazy"
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-2xl">
-                                                            🛒
-                                                        </div>
-                                                    )}
-
-                                                </div>
-
-                                                {/* DETAILS */}
-
-                                                <div className="p-2">
-
-                                                    <h3
-                                                        className="text-[11px] font-black text-gray-800 line-clamp-2 min-h-[28px]"
-                                                        title={
-                                                            product.name
-                                                        }
-                                                    >
-                                                        {
-                                                            product.name
-                                                        }
-                                                    </h3>
-
-                                                    <div className="flex items-center justify-between gap-1 mt-1">
-
-                                                        <div className="min-w-0">
-
-                                                            <p className="text-xs font-black text-blue-600 truncate">
-                                                                ₹
-                                                                {
-                                                                    displayPrice
-                                                                }
-                                                            </p>
-
-                                                            {product.offer_price !==
-                                                                null &&
-                                                                product.offer_price !==
-                                                                undefined &&
-                                                                product.offer_price !==
-                                                                "" &&
-                                                                Number(
-                                                                    product.offer_price
-                                                                ) <
-                                                                Number(
-                                                                    product.price
-                                                                ) && (
-                                                                    <p className="text-[9px] text-gray-400 line-through">
-                                                                        ₹
-                                                                        {
-                                                                            product.price
-                                                                        }
-                                                                    </p>
-                                                                )}
-
-                                                        </div>
-
-                                                        <span
-                                                            className={`text-[9px] font-bold whitespace-nowrap ${Number(
-                                                                product.stock
-                                                            ) <=
-                                                                    0
-                                                                    ? "text-red-600"
-                                                                    : "text-gray-500"
-                                                                }`}
-                                                        >
-                                                            Stock:{" "}
-                                                            {
-                                                                product.stock
-                                                            }
-                                                        </span>
-
-                                                    </div>
-
-                                                    {product.category && (
-                                                        <p className="text-[8px] text-gray-400 truncate mt-1">
-                                                            {
-                                                                product.category
-                                                            }
-                                                        </p>
-                                                    )}
-
-                                                    {/* ACTIONS */}
-
-                                                    <div className="grid grid-cols-3 gap-1 mt-2">
-
-                                                        <button
-                                                            onClick={() =>
-                                                                handleEdit(
-                                                                    product
-                                                                )
-                                                            }
-                                                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md py-1.5 text-[9px] font-black"
-                                                        >
-                                                            ✏️
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() =>
-                                                                handleToggleActive(
-                                                                    product
-                                                                )
-                                                            }
-                                                            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-md py-1.5 text-[9px] font-black"
-                                                        >
-                                                            {product.is_active
-                                                                ? "⏸️"
-                                                                : "▶️"}
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() =>
-                                                                handleDelete(
-                                                                    product.id
-                                                                )
-                                                            }
-                                                            className="bg-red-50 hover:bg-red-100 text-red-700 rounded-md py-1.5 text-[9px] font-black"
-                                                        >
-                                                            🗑️
-                                                        </button>
-
-                                                    </div>
-
-                                                </div>
-
-                                            </div>
-                                        );
-                                    }
-                                )}
-
+                        {selectedProducts.length > 0 && (
+                            <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                                <span className="text-xs font-bold text-red-700">{selectedProducts.length}/50 selected</span>
+                                <button onClick={() => setSelectedProducts([])} className="text-xs font-bold text-red-700">Clear selection</button>
                             </div>
                         )}
-
                     </div>
 
+                    <div className="p-3">
+                        {loading ? (
+                            <p className="py-10 text-center text-xs text-gray-500">Loading products...</p>
+                        ) : filteredProducts.length === 0 ? (
+                            <p className="rounded-xl border border-dashed p-10 text-center text-sm text-gray-500">No products found.</p>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+                                {filteredProducts.map((product) => {
+                                    const isSelected = selectedProducts.some(
+                                        (id) => String(id) === String(product.id)
+                                    );
+
+                                    const hasOffer =
+                                        product.offer_price !== null &&
+                                        product.offer_price !== undefined &&
+                                        product.offer_price !== "" &&
+                                        Number(product.offer_price) < Number(product.price);
+
+                                    const displayPrice = hasOffer
+                                        ? product.offer_price
+                                        : product.price;
+
+                                    return (
+                                        <article key={product.id} className={`relative overflow-hidden rounded-xl border bg-white ${isSelected ? "border-red-500 ring-2 ring-red-100" : "border-gray-200"}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => handleSelectProduct(product.id)}
+                                                className="absolute left-2 top-2 z-10 h-4 w-4 accent-red-600"
+                                                aria-label={`Select ${product.name}`}
+                                            />
+                                            <span className={`absolute right-2 top-2 z-10 rounded px-1.5 py-0.5 text-[8px] font-black text-white ${product.is_active ? "bg-green-600" : "bg-gray-700"}`}>
+                                                {product.is_active ? "ON" : "OFF"}
+                                            </span>
+
+                                            <div className="h-28 bg-gray-50">
+                                                {product.image_url ? (
+                                                    <img src={product.image_url} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center text-3xl text-gray-300">🛒</div>
+                                                )}
+                                            </div>
+
+                                            <div className="p-2">
+                                                <h3 title={product.name} className="line-clamp-2 min-h-8 text-[11px] font-black">
+                                                    {product.name}
+                                                </h3>
+                                                <p className="mt-1 text-xs font-black text-blue-600">₹{displayPrice}</p>
+                                                {hasOffer && <p className="text-[9px] text-gray-400 line-through">₹{product.price}</p>}
+                                                <p className={`mt-1 text-[10px] ${Number(product.stock) <= 0 ? "text-red-600" : "text-gray-500"}`}>
+                                                    Stock: {product.stock}
+                                                </p>
+                                                {product.category && <p className="truncate text-[9px] text-gray-400">{product.category}</p>}
+
+                                                <div className="mt-2 grid grid-cols-3 gap-1">
+                                                    <button onClick={() => handleEdit(product)} className="rounded bg-blue-50 py-1.5 text-[10px] font-bold text-blue-700">Edit</button>
+                                                    <button onClick={() => handleToggleActive(product)} className="rounded bg-yellow-50 py-1.5 text-[10px] font-bold text-yellow-700">{product.is_active ? "Off" : "On"}</button>
+                                                    <button onClick={() => handleDelete(product.id)} className="rounded bg-red-50 py-1.5 text-[10px] font-bold text-red-700">Del</button>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </section>
-
             </main>
-
-            {/* ==================================================
-                COMPACT ADMIN CSS
-            ================================================== */}
 
             <style>{`
                 .admin-label {
                     display: block;
-                    font-size: 10px;
-                    font-weight: 800;
+                    margin-bottom: 5px;
                     color: #4b5563;
-                    margin-bottom: 4px;
+                    font-size: 11px;
+                    font-weight: 800;
                 }
-
                 .admin-input {
                     width: 100%;
-                    height: 38px;
+                    min-width: 0;
+                    height: 40px;
                     border: 1px solid #d1d5db;
                     border-radius: 8px;
                     padding: 0 10px;
+                    background: white;
                     font-size: 12px;
                     outline: none;
-                    background: white;
                 }
-
                 .admin-input:focus {
                     border-color: #3b82f6;
-                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+                    box-shadow: 0 0 0 2px rgba(59,130,246,.12);
                 }
-
                 .line-clamp-2 {
                     display: -webkit-box;
                     -webkit-line-clamp: 2;
                     -webkit-box-orient: vertical;
                     overflow: hidden;
                 }
-
-                @media (max-width: 640px) {
-                    .admin-input {
-                        height: 40px;
-                    }
-                }
             `}</style>
+        </div>
+    );
+}
 
+function Field({ label, children }) {
+    return (
+        <div className="min-w-0">
+            <label className="admin-label">{label}</label>
+            {children}
         </div>
     );
 }

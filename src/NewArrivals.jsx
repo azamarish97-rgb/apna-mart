@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-
 import { Link, useNavigate } from "react-router-dom";
-
 import { supabase } from "./supabase";
-
 import { useCart } from "./cartcontext";
 
 function NewArrivals() {
@@ -28,33 +25,48 @@ function NewArrivals() {
     };
 
     // =====================================================
-    // GET NEW PRODUCTS
+    // GET NEW PRODUCTS - BANDWIDTH OPTIMIZED
     // =====================================================
 
     useEffect(() => {
+        let isMounted = true;
+
         const getProducts = async () => {
-            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from("products")
+                    .select(
+                        "id, name, price, offer_price, stock, weight, image_url, created_at"
+                    )
+                    .eq("is_active", true)
+                    .order("created_at", {
+                        ascending: false,
+                    })
+                    .limit(8);
 
-            const { data, error } = await supabase
-                .from("products")
-                .select("*")
-                .eq("is_active", true)
-                .order("created_at", {
-                    ascending: false,
-                })
-                .limit(8);
+                if (error) throw error;
 
-            if (error) {
+                if (isMounted) {
+                    setProducts(data || []);
+                }
+            } catch (error) {
                 console.error("SUPABASE ERROR:", error);
-                setLoading(false);
-                return;
-            }
 
-            setProducts(data || []);
-            setLoading(false);
+                if (isMounted) {
+                    setProducts([]);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
         };
 
         getProducts();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     // =====================================================
@@ -63,8 +75,10 @@ function NewArrivals() {
 
     const getDiscount = (price, offerPrice) => {
         if (
-            !price ||
-            !offerPrice ||
+            price == null ||
+            Number(price) <= 0 ||
+            offerPrice == null ||
+            Number(offerPrice) <= 0 ||
             Number(offerPrice) >= Number(price)
         ) {
             return 0;
@@ -84,7 +98,7 @@ function NewArrivals() {
     if (loading) {
         return (
             <div className="max-w-7xl mx-auto px-4 sm:px-5 mt-8 sm:mt-10">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="flex gap-3 overflow-hidden">
                     {[...Array(4)].map((_, i) => (
                         <div
                             key={i}
@@ -92,6 +106,9 @@ function NewArrivals() {
                                 bg-[var(--primary-light)]
                                 rounded-2xl
                                 h-52
+                                min-w-[46%]
+                                sm:min-w-[30%]
+                                lg:min-w-[23%]
                                 animate-pulse
                             "
                         />
@@ -143,16 +160,20 @@ function NewArrivals() {
                 </Link>
             </div>
 
-            {/* PRODUCT GRID */}
+            {/* HORIZONTAL SIDE SLIDER */}
 
             <div
                 className="
-                    grid
-                    grid-cols-2
-                    sm:grid-cols-3
-                    lg:grid-cols-4
+                    flex
                     gap-3
                     sm:gap-5
+                    overflow-x-auto
+                    overflow-y-hidden
+                    scroll-smooth
+                    snap-x
+                    snap-mandatory
+                    pb-3
+                    scrollbar-hide
                 "
             >
                 {products.map((product) => {
@@ -162,11 +183,12 @@ function NewArrivals() {
                     );
 
                     const hasOffer =
-                        product.offer_price !== null &&
+                        product.offer_price != null &&
+                        Number(product.offer_price) > 0 &&
                         Number(product.offer_price) <
                         Number(product.price);
 
-                    const stock = Number(product.stock);
+                    const stock = Number(product.stock) || 0;
 
                     const cartItem = cart.find(
                         (item) => item.id === product.id
@@ -176,6 +198,14 @@ function NewArrivals() {
                         <div
                             key={product.id}
                             className="
+                                min-w-[46%]
+                                w-[46%]
+                                sm:min-w-[30%]
+                                sm:w-[30%]
+                                lg:min-w-[23%]
+                                lg:w-[23%]
+                                flex-shrink-0
+                                snap-start
                                 bg-white
                                 rounded-2xl
                                 overflow-hidden
@@ -187,7 +217,6 @@ function NewArrivals() {
                                 border-gray-100
                             "
                         >
-
                             {/* CLICKABLE PRODUCT AREA */}
 
                             <div
@@ -213,13 +242,14 @@ function NewArrivals() {
                                     {product.image_url ? (
                                         <img
                                             src={product.image_url}
-                                            alt={product.name}
+                                            alt={product.name || "Product"}
                                             className="
                                                 w-full
                                                 h-full
                                                 object-cover
                                             "
                                             loading="lazy"
+                                            decoding="async"
                                         />
                                     ) : (
                                         <span className="text-4xl">
@@ -336,7 +366,6 @@ function NewArrivals() {
                             {/* CART CONTROLS */}
 
                             <div className="px-3 pb-3">
-
                                 {stock > 0 && cartItem ? (
                                     <div
                                         className="
@@ -351,6 +380,7 @@ function NewArrivals() {
                                         "
                                     >
                                         <button
+                                            type="button"
                                             onClick={() =>
                                                 decreaseQuantity(
                                                     product.id
@@ -378,14 +408,14 @@ function NewArrivals() {
                                         </span>
 
                                         <button
+                                            type="button"
                                             onClick={() =>
                                                 increaseQuantity(
                                                     product.id
                                                 )
                                             }
                                             disabled={
-                                                cartItem.quantity >=
-                                                stock
+                                                cartItem.quantity >= stock
                                             }
                                             className="
                                                 w-9
@@ -401,6 +431,7 @@ function NewArrivals() {
                                     </div>
                                 ) : stock > 0 ? (
                                     <button
+                                        type="button"
                                         onClick={() =>
                                             addToCart(product)
                                         }
@@ -421,6 +452,7 @@ function NewArrivals() {
                                     </button>
                                 ) : (
                                     <button
+                                        type="button"
                                         disabled
                                         className="
                                             w-full

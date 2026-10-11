@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useCart } from "./cartcontext";
 import { supabase } from "./supabase";
 import { useNavigate } from "react-router-dom";
+import Footer from "./Footer";
 
 
 
@@ -248,8 +249,15 @@ function Cart() {
     };
 
     // ================= PLACE ORDER =================
+
+    // ================= PLACE ORDER =================
     const placeOrder = async () => {
         console.log("PLACE ORDER CLICKED");
+
+        if (!cart.length) {
+            alert("Your cart is empty!");
+            return;
+        }
 
         const result = await loadProfile();
 
@@ -262,23 +270,59 @@ function Cart() {
             return;
         }
 
-        const { error } = await supabase
+        // Step 1: Create order in orders table
+        const { data: orderData, error: orderError } = await supabase
             .from("orders")
-            .insert([
-                {
-                    user_id: user.id,
-                    customer_name: profile.full_name,
-                    mobile: profile.mobile,
-                    address: customer.address.trim(),
-                    location: customer.location,
-                    total_amount: total,
-                    status: "pending",
-                },
-            ]);
+            .insert({
+                user_id: user.id,
+                customer_name: profile.full_name,
+                mobile: profile.mobile,
+                address: customer.address.trim(),
+                location: customer.location || null,
+                total_amount: total,
+                status: "pending",
+            })
+            .select("id")
+            .single();
 
-        if (error) {
-            console.error("ORDER ERROR:", error);
-            alert("Order failed ❌");
+        if (orderError) {
+            console.error("ORDER ERROR:", orderError);
+            alert("Order failed ❌ " + orderError.message);
+            return;
+        }
+
+        // Step 2: Save every cart product in order_items
+        const orderItems = cart.map((item) => ({
+            order_id: orderData.id,
+            product_id: item.id,
+            product_name: item.name,
+            price: Number(item.price),
+            quantity: Number(item.quantity),
+        }));
+
+        const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
+
+        if (itemsError) {
+            console.error("ORDER ITEMS ERROR:", itemsError);
+
+            // Remove the incomplete order if saving its items failed
+            const { error: rollbackError } = await supabase
+                .from("orders")
+                .delete()
+                .eq("id", orderData.id)
+                .eq("user_id", user.id);
+
+            if (rollbackError) {
+                console.error("ORDER CLEANUP ERROR:", rollbackError);
+            }
+
+            alert(
+                "Products save nahi hue ❌ " +
+                itemsError.message +
+                "\nPlease try again."
+            );
             return;
         }
 
@@ -287,6 +331,7 @@ function Cart() {
         clearCart();
         navigate("/order-success");
     };
+
     return (
         <main className="min-h-screen bg-gray-100">
 
@@ -613,6 +658,8 @@ function Cart() {
                     </div>
 
                 </div>
+                <Footer />
+
 
             </div>
 

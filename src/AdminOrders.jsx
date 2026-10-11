@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { useNavigate } from "react-router-dom";
@@ -7,23 +8,18 @@ function AdminOrders() {
     const navigate = useNavigate();
 
     const [orders, setOrders] = useState([]);
+    const [orderItems, setOrderItems] = useState({});
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(null);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [openOrder, setOpenOrder] = useState(null);
 
-    // ==========================================
     // PUSH NOTIFICATION STATE
-    // ==========================================
-
     const [pushLoading, setPushLoading] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
 
-    // ==========================================
-    // FETCH ORDERS
-    // ==========================================
-
+    // FETCH ORDERS AND ORDER ITEMS
     useEffect(() => {
         fetchOrders();
     }, []);
@@ -38,52 +34,71 @@ function AdminOrders() {
                 });
 
             if (error) {
-                console.error(
-                    "ADMIN ORDERS ERROR:",
-                    error
-                );
-
+                console.error("ADMIN ORDERS ERROR:", error);
                 alert("Orders load failed ❌");
                 return;
             }
 
-            setOrders(data || []);
-        } catch (error) {
-            console.error(
-                "FETCH ORDERS ERROR:",
-                error
-            );
+            const fetchedOrders = data || [];
+            setOrders(fetchedOrders);
 
+            if (fetchedOrders.length === 0) {
+                setOrderItems({});
+                return;
+            }
+
+            const orderIds = fetchedOrders.map((order) => order.id);
+
+            const { data: items, error: itemsError } = await supabase
+                .from("order_items")
+                .select("*")
+                .in("order_id", orderIds)
+                .order("created_at", {
+                    ascending: true,
+                });
+
+            if (itemsError) {
+                console.error("ADMIN ORDER ITEMS ERROR:", itemsError);
+                setOrderItems({});
+                alert("Order products load failed ❌");
+                return;
+            }
+
+            const groupedItems = {};
+
+            (items || []).forEach((item) => {
+                const key = String(item.order_id);
+
+                if (!groupedItems[key]) {
+                    groupedItems[key] = [];
+                }
+
+                groupedItems[key].push(item);
+            });
+
+            setOrderItems(groupedItems);
+        } catch (error) {
+            console.error("FETCH ORDERS ERROR:", error);
             alert("Orders load failed ❌");
         } finally {
             setLoading(false);
         }
     };
 
-    // ==========================================
     // ENABLE PUSH NOTIFICATIONS
-    // ==========================================
-
     const handleEnableNotifications = async () => {
         try {
             setPushLoading(true);
 
             await enablePushNotifications();
-
             setPushEnabled(true);
 
-            alert(
-                "🔔 Notifications enabled successfully!"
-            );
+            alert("🔔 Notifications enabled successfully!");
         } catch (error) {
-            console.error(
-                "NOTIFICATION ERROR:",
-                error
-            );
+            console.error("NOTIFICATION ERROR:", error);
 
             alert(
-                `Notification enable nahi hua ❌\n\n${error?.message ||
-                "Unknown error"
+                `Notification enable nahi hua ❌\n\n${error?.message || "Unknown error"
                 }`
             );
         } finally {
@@ -91,14 +106,8 @@ function AdminOrders() {
         }
     };
 
-    // ==========================================
     // UPDATE STATUS
-    // ==========================================
-
-    const updateStatus = async (
-        orderId,
-        newStatus
-    ) => {
+    const updateStatus = async (orderId, newStatus) => {
         setUpdating(orderId);
 
         try {
@@ -109,68 +118,39 @@ function AdminOrders() {
                 })
                 .eq("id", orderId);
 
-            console.log(
-                "ORDER ID:",
-                orderId
-            );
-
-            console.log(
-                "NEW STATUS:",
-                newStatus
-            );
-
-            console.log(
-                "UPDATE ERROR:",
-                error
-            );
+            console.log("ORDER ID:", orderId);
+            console.log("NEW STATUS:", newStatus);
+            console.log("UPDATE ERROR:", error);
 
             if (error) {
-                console.error(
-                    "STATUS UPDATE ERROR:",
-                    error
-                );
+                console.error("STATUS UPDATE ERROR:", error);
 
-                alert(
-                    `Status update failed ❌\n\n${error.message}`
-                );
-
+                alert(`Status update failed ❌\n\n${error.message}`);
                 return;
             }
 
-            setOrders(
-                (currentOrders) =>
-                    currentOrders.map(
-                        (order) =>
-                            order.id === orderId
-                                ? {
-                                    ...order,
-                                    status: newStatus,
-                                }
-                                : order
-                    )
+            setOrders((currentOrders) =>
+                currentOrders.map((order) =>
+                    order.id === orderId
+                        ? {
+                            ...order,
+                            status: newStatus,
+                        }
+                        : order
+                )
             );
 
-            alert(
-                "Order status updated ✅"
-            );
+            alert("Order status updated ✅");
         } catch (error) {
-            console.error(
-                "STATUS UPDATE ERROR:",
-                error
-            );
+            console.error("STATUS UPDATE ERROR:", error);
 
-            alert(
-                `Something went wrong ❌\n\n${error.message}`
-            );
+            alert(`Something went wrong ❌\n\n${error.message}`);
         } finally {
             setUpdating(null);
         }
     };
 
-    // ==========================================
     // DELETE ORDER
-    // ==========================================
-
     const deleteOrder = async (orderId) => {
         const confirmed = window.confirm(
             `Order #${orderId} permanently delete karna hai?\n\nYe action undo nahi kiya ja sakta.`
@@ -183,67 +163,63 @@ function AdminOrders() {
         setUpdating(orderId);
 
         try {
+            // Delete order items first
+            const { error: itemsError } = await supabase
+                .from("order_items")
+                .delete()
+                .eq("order_id", orderId);
+
+            if (itemsError) {
+                console.error("DELETE ORDER ITEMS ERROR:", itemsError);
+
+                alert(
+                    `Order products delete failed ❌\n\n${itemsError.message}`
+                );
+                return;
+            }
+
             const { error } = await supabase
                 .from("orders")
                 .delete()
                 .eq("id", orderId);
 
             if (error) {
-                console.error(
-                    "DELETE ORDER ERROR:",
-                    error
-                );
+                console.error("DELETE ORDER ERROR:", error);
 
-                alert(
-                    `Order delete failed ❌\n\n${error.message}`
-                );
-
+                alert(`Order delete failed ❌\n\n${error.message}`);
                 return;
             }
 
-            setOrders(
-                (currentOrders) =>
-                    currentOrders.filter(
-                        (order) =>
-                            order.id !== orderId
-                    )
+            setOrders((currentOrders) =>
+                currentOrders.filter((order) => order.id !== orderId)
             );
+
+            setOrderItems((currentItems) => {
+                const updatedItems = { ...currentItems };
+                delete updatedItems[String(orderId)];
+                return updatedItems;
+            });
 
             if (openOrder === orderId) {
                 setOpenOrder(null);
             }
 
-            alert(
-                "Order deleted successfully 🗑️"
-            );
+            alert("Order deleted successfully 🗑️");
         } catch (error) {
-            console.error(
-                "DELETE ORDER ERROR:",
-                error
-            );
+            console.error("DELETE ORDER ERROR:", error);
 
-            alert(
-                `Something went wrong ❌\n\n${error.message}`
-            );
+            alert(`Something went wrong ❌\n\n${error.message}`);
         } finally {
             setUpdating(null);
         }
     };
 
-    // ==========================================
     // LOGOUT
-    // ==========================================
-
     const handleLogout = async () => {
-        const { error } =
-            await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut();
 
         if (error) {
-            console.error(
-                "ADMIN LOGOUT ERROR:",
-                error
-            );
-
+            console.error("ADMIN LOGOUT ERROR:", error);
             alert("Logout failed ❌");
             return;
         }
@@ -251,69 +227,42 @@ function AdminOrders() {
         navigate("/admin-login");
     };
 
-    // ==========================================
     // STATUS STYLE
-    // ==========================================
-
     const getStatusStyle = (status) => {
         switch (status) {
             case "pending":
                 return "bg-yellow-100 text-yellow-700";
-
             case "confirmed":
                 return "bg-blue-100 text-blue-700";
-
             case "shipped":
                 return "bg-purple-100 text-purple-700";
-
             case "delivered":
                 return "bg-green-100 text-green-700";
-
             case "cancelled":
                 return "bg-red-100 text-red-700";
-
             default:
                 return "bg-gray-100 text-gray-700";
         }
     };
 
-    // ==========================================
     // FILTER ORDERS
-    // ==========================================
+    const filteredOrders = orders.filter((order) => {
+        const searchText = search.toLowerCase().trim();
 
-    const filteredOrders = orders.filter(
-        (order) => {
-            const searchText =
-                search.toLowerCase().trim();
+        const matchesSearch =
+            String(order.id).toLowerCase().includes(searchText) ||
+            String(order.customer_name || "")
+                .toLowerCase()
+                .includes(searchText) ||
+            String(order.mobile || "").toLowerCase().includes(searchText);
 
-            const matchesSearch =
-                String(order.id)
-                    .toLowerCase()
-                    .includes(searchText) ||
-                String(
-                    order.customer_name || ""
-                )
-                    .toLowerCase()
-                    .includes(searchText) ||
-                String(order.mobile || "")
-                    .toLowerCase()
-                    .includes(searchText);
+        const matchesStatus =
+            statusFilter === "all" || order.status === statusFilter;
 
-            const matchesStatus =
-                statusFilter === "all" ||
-                order.status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
 
-            return (
-                matchesSearch &&
-                matchesStatus
-            );
-        }
-    );
-
-    // ==========================================
     // LOADING
-    // ==========================================
-
     if (loading) {
         return (
             <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -328,23 +277,13 @@ function AdminOrders() {
         );
     }
 
-    // ==========================================
     // MAIN
-    // ==========================================
-
     return (
         <main className="min-h-screen bg-gray-50 px-2 sm:px-4 lg:px-5 py-3 sm:py-5">
-
             <div className="max-w-[1600px] mx-auto">
-
-                {/* ==========================================
-                    HEADER
-                ========================================== */}
-
+                {/* HEADER */}
                 <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 mb-4">
-
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-
                         <div>
                             <p className="text-xs text-blue-600 font-semibold">
                                 APNAMART ADMIN
@@ -360,16 +299,9 @@ function AdminOrders() {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2">
-
-                            {/* NOTIFICATION BUTTON */}
-
                             <button
-                                onClick={
-                                    handleEnableNotifications
-                                }
-                                disabled={
-                                    pushLoading
-                                }
+                                onClick={handleEnableNotifications}
+                                disabled={pushLoading}
                                 className={`px-4 py-2.5 rounded-lg font-semibold text-sm transition ${pushEnabled
                                         ? "bg-green-600 text-white"
                                         : "bg-orange-500 hover:bg-orange-600 text-white"
@@ -382,118 +314,70 @@ function AdminOrders() {
                                         : "🔔 Enable Notifications"}
                             </button>
 
-                            {/* PRODUCT DASHBOARD */}
-
                             <button
-                                onClick={() =>
-                                    navigate(
-                                        "/admin/dashboard"
-                                    )
-                                }
+                                onClick={() => navigate("/admin/dashboard")}
                                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-semibold text-sm transition"
                             >
                                 🛠️ Product Dashboard
                             </button>
 
-                            {/* LOGOUT */}
-
                             <button
-                                onClick={
-                                    handleLogout
-                                }
+                                onClick={handleLogout}
                                 className="bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition"
                             >
                                 Logout 🚪
                             </button>
-
                         </div>
                     </div>
                 </div>
 
-                {/* ==========================================
-                    STATS
-                ========================================== */}
-
+                {/* STATS */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
-
-                    {/* TOTAL */}
-
                     <div className="bg-white rounded-xl p-3 shadow-sm">
-                        <p className="text-gray-500 text-xs">
-                            Total Orders
-                        </p>
-
+                        <p className="text-gray-500 text-xs">Total Orders</p>
                         <p className="text-xl sm:text-2xl font-bold mt-1">
                             {orders.length}
                         </p>
                     </div>
 
-                    {/* PENDING */}
-
                     <div className="bg-white rounded-xl p-3 shadow-sm">
-                        <p className="text-gray-500 text-xs">
-                            Pending
-                        </p>
-
+                        <p className="text-gray-500 text-xs">Pending</p>
                         <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-1">
                             {
                                 orders.filter(
-                                    (order) =>
-                                        order.status ===
-                                        "pending"
+                                    (order) => order.status === "pending"
                                 ).length
                             }
                         </p>
                     </div>
 
-                    {/* SHIPPED */}
-
                     <div className="bg-white rounded-xl p-3 shadow-sm">
-                        <p className="text-gray-500 text-xs">
-                            Shipped
-                        </p>
-
+                        <p className="text-gray-500 text-xs">Shipped</p>
                         <p className="text-xl sm:text-2xl font-bold text-purple-600 mt-1">
                             {
                                 orders.filter(
-                                    (order) =>
-                                        order.status ===
-                                        "shipped"
+                                    (order) => order.status === "shipped"
                                 ).length
                             }
                         </p>
                     </div>
 
-                    {/* DELIVERED */}
-
                     <div className="bg-white rounded-xl p-3 shadow-sm">
-                        <p className="text-gray-500 text-xs">
-                            Delivered
-                        </p>
-
+                        <p className="text-gray-500 text-xs">Delivered</p>
                         <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
                             {
                                 orders.filter(
-                                    (order) =>
-                                        order.status ===
-                                        "delivered"
+                                    (order) => order.status === "delivered"
                                 ).length
                             }
                         </p>
                     </div>
-
                 </div>
 
-                {/* ==========================================
-                    SEARCH + FILTER
-                ========================================== */}
-
+                {/* SEARCH + FILTER */}
                 <div className="bg-white rounded-xl shadow-sm p-3 mb-4">
-
                     <div className="flex flex-col sm:flex-row gap-2">
-
                         <div className="flex-1 relative">
-
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                                 🔎
                             </span>
@@ -501,72 +385,35 @@ function AdminOrders() {
                             <input
                                 type="text"
                                 value={search}
-                                onChange={(e) =>
-                                    setSearch(
-                                        e.target.value
-                                    )
-                                }
+                                onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search order ID, name or mobile..."
                                 className="w-full border border-gray-200 rounded-lg pl-10 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                             />
-
                         </div>
 
                         <select
                             value={statusFilter}
-                            onChange={(e) =>
-                                setStatusFilter(
-                                    e.target.value
-                                )
-                            }
+                            onChange={(e) => setStatusFilter(e.target.value)}
                             className="sm:w-48 border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                            <option value="all">
-                                All Status
-                            </option>
-
-                            <option value="pending">
-                                Pending
-                            </option>
-
-                            <option value="confirmed">
-                                Confirmed
-                            </option>
-
-                            <option value="shipped">
-                                Shipped
-                            </option>
-
-                            <option value="delivered">
-                                Delivered
-                            </option>
-
-                            <option value="cancelled">
-                                Cancelled
-                            </option>
+                            <option value="all">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="shipped">Shipped</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
                         </select>
-
                     </div>
 
                     <p className="text-xs text-gray-500 mt-2">
-                        Showing{" "}
-                        {filteredOrders.length} of{" "}
-                        {orders.length} orders
+                        Showing {filteredOrders.length} of {orders.length} orders
                     </p>
-
                 </div>
 
-                {/* ==========================================
-                    ORDERS
-                ========================================== */}
-
+                {/* ORDERS */}
                 {filteredOrders.length === 0 ? (
-
                     <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-
-                        <div className="text-5xl">
-                            📦
-                        </div>
+                        <div className="text-5xl">📦</div>
 
                         <h2 className="text-lg font-bold mt-3">
                             No Orders Found
@@ -575,40 +422,36 @@ function AdminOrders() {
                         <p className="text-gray-500 text-sm mt-1">
                             Try changing your search or filter.
                         </p>
-
                     </div>
-
                 ) : (
-
                     <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                        {filteredOrders.map((order) => {
+                            const items =
+                                orderItems[String(order.id)] || [];
 
-                        {filteredOrders.map(
-                            (order) => (
+                            const itemsSubtotal = items.reduce(
+                                (sum, item) =>
+                                    sum +
+                                    Number(item.price || 0) *
+                                    Number(item.quantity || 0),
+                                0
+                            );
 
+                            return (
                                 <div
                                     key={order.id}
                                     className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
                                 >
-
-                                    {/* ==========================================
-                                        ORDER HEADER
-                                    ========================================== */}
-
+                                    {/* ORDER HEADER */}
                                     <div className="p-3 border-b">
-
                                         <div className="flex items-start justify-between gap-2">
-
                                             <div className="min-w-0">
-
                                                 <p className="text-[10px] text-gray-500 font-semibold">
                                                     ORDER ID
                                                 </p>
 
                                                 <h2 className="text-base font-bold truncate">
-                                                    #
-                                                    {
-                                                        order.id
-                                                    }
+                                                    #{order.id}
                                                 </h2>
 
                                                 <p className="text-[11px] text-gray-500 mt-0.5">
@@ -620,7 +463,6 @@ function AdminOrders() {
                                                         )
                                                         : "Date unavailable"}
                                                 </p>
-
                                             </div>
 
                                             <span
@@ -628,181 +470,166 @@ function AdminOrders() {
                                                     order.status
                                                 )}`}
                                             >
-                                                {
-                                                    order.status ||
-                                                    "pending"
-                                                }
+                                                {order.status || "pending"}
                                             </span>
-
                                         </div>
-
                                     </div>
 
-                                    {/* ==========================================
-                                        CUSTOMER
-                                    ========================================== */}
-
+                                    {/* CUSTOMER */}
                                     <div className="p-3">
-
                                         <h3 className="font-bold text-sm mb-2.5">
                                             👤 Customer
                                         </h3>
 
                                         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-
-                                            {/* NAME */}
-
                                             <div className="min-w-0">
-
                                                 <p className="text-[10px] text-gray-500">
                                                     Name
                                                 </p>
-
                                                 <p className="font-semibold text-sm truncate">
-                                                    {
-                                                        order.customer_name ||
-                                                        "N/A"
-                                                    }
+                                                    {order.customer_name || "N/A"}
                                                 </p>
-
                                             </div>
 
-                                            {/* MOBILE */}
-
                                             <div className="min-w-0">
-
                                                 <p className="text-[10px] text-gray-500">
                                                     Mobile
                                                 </p>
-
                                                 <p className="font-semibold text-sm truncate">
-                                                    {
-                                                        order.mobile ||
-                                                        "N/A"
-                                                    }
+                                                    {order.mobile || "N/A"}
                                                 </p>
-
                                             </div>
 
-                                            {/* ADDRESS */}
-
                                             <div className="col-span-2">
-
                                                 <p className="text-[10px] text-gray-500">
                                                     Address
                                                 </p>
-
                                                 <p className="font-semibold text-sm line-clamp-2">
-                                                    {
-                                                        order.address ||
-                                                        "N/A"
-                                                    }
+                                                    {order.address || "N/A"}
                                                 </p>
-
                                             </div>
 
-                                            {/* TOTAL */}
-
                                             <div>
-
                                                 <p className="text-[10px] text-gray-500">
                                                     Total
                                                 </p>
-
                                                 <p className="font-bold text-green-600 text-sm">
-                                                    ₹
-                                                    {
-                                                        order.total_amount ??
-                                                        0
-                                                    }
+                                                    ₹{order.total_amount ?? 0}
                                                 </p>
-
                                             </div>
-
                                         </div>
 
-                                        {/* ==========================================
-                                            EXTRA INFO
-                                        ========================================== */}
+                                        {/* ORDERED PRODUCTS */}
 
+                                        {/* ORDERED PRODUCTS */}
+                                        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-3 min-w-0">
+                                            <div className="flex items-center justify-between gap-2 mb-3">
+                                                <h3 className="font-bold text-sm text-gray-800">
+                                                    🛒 Ordered Products
+                                                </h3>
+
+                                                <span className="shrink-0 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
+                                                    {items.length} {items.length === 1 ? "item" : "items"}
+                                                </span>
+                                            </div>
+
+                                            {items.length === 0 ? (
+                                                <p className="text-xs text-gray-500">
+                                                    No products saved for this order.
+                                                </p>
+                                            ) : (
+                                                <>
+                                                    {/* SCROLLABLE PRODUCT LIST */}
+                                                    <div className="max-h-64 overflow-y-auto overscroll-contain pr-2">
+                                                        <div className="space-y-3">
+                                                            {items.map((item) => (
+                                                                <div
+                                                                    key={item.id}
+                                                                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-blue-100 last:border-0 pb-3 last:pb-0"
+                                                                >
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-semibold text-sm text-gray-800 whitespace-normal break-words">
+                                                                            {item.product_name || "Unnamed Product"}
+                                                                        </p>
+
+                                                                        <p className="text-xs text-gray-500 mt-1">
+                                                                            ₹{Number(item.price || 0).toFixed(2)}
+                                                                            {" × "}
+                                                                            {item.quantity}
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <p className="font-bold text-sm text-gray-900 text-right whitespace-nowrap">
+                                                                        ₹
+                                                                        {(
+                                                                            Number(item.price || 0) *
+                                                                            Number(item.quantity || 0)
+                                                                        ).toFixed(2)}
+                                                                    </p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* FIXED SUBTOTAL */}
+                                                    <div className="border-t border-blue-200 mt-3 pt-3 flex justify-between items-center gap-3">
+                                                        <span className="font-bold text-sm">
+                                                            Products Subtotal
+                                                        </span>
+
+                                                        <span className="font-extrabold text-green-700 text-sm whitespace-nowrap">
+                                                            ₹{itemsSubtotal.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* EXTRA INFO */}
                                         <div className="mt-3 bg-gray-50 rounded-lg p-2.5">
-
                                             <div className="space-y-2 text-xs">
-
-                                                {/* PAYMENT */}
-
                                                 <div className="flex justify-between gap-3">
-
                                                     <span className="text-gray-500">
                                                         Payment
                                                     </span>
-
                                                     <span className="font-semibold text-right">
-                                                        Cash on Delivery
+                                                        {order.payment_method ||
+                                                            "Cash on Delivery"}
                                                     </span>
-
                                                 </div>
 
-                                                {/* STATUS */}
-
                                                 <div className="flex justify-between gap-3">
-
                                                     <span className="text-gray-500">
                                                         Status
                                                     </span>
-
                                                     <span className="font-semibold capitalize">
-                                                        {
-                                                            order.status ||
-                                                            "pending"
-                                                        }
+                                                        {order.status || "pending"}
                                                     </span>
-
                                                 </div>
 
-                                                {/* CANCELLATION */}
-
-                                                {order.status ===
-                                                    "cancelled" && (
-                                                        <div className="bg-red-50 border border-red-200 rounded-lg p-2">
-
-                                                            <p className="text-[10px] text-red-500 font-semibold">
-                                                                Cancellation Reason
-                                                            </p>
-
-                                                            <p className="text-red-700 font-medium text-xs mt-0.5">
-                                                                {
-                                                                    order.cancellation_reason ||
-                                                                    "No reason provided"
-                                                                }
-                                                            </p>
-
-                                                        </div>
-                                                    )}
-
-                                                {/* TOTAL */}
+                                                {order.status === "cancelled" && (
+                                                    <div className="bg-red-50 border border-red-200 rounded-lg p-2">
+                                                        <p className="text-[10px] text-red-500 font-semibold">
+                                                            Cancellation Reason
+                                                        </p>
+                                                        <p className="text-red-700 font-medium text-xs mt-0.5">
+                                                            {order.cancellation_reason ||
+                                                                "No reason provided"}
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 <div className="border-t pt-2 flex justify-between gap-3">
-
                                                     <span className="font-semibold">
                                                         Total
                                                     </span>
-
                                                     <span className="font-bold text-green-600">
-                                                        ₹
-                                                        {
-                                                            order.total_amount ??
-                                                            0
-                                                        }
+                                                        ₹{order.total_amount ?? 0}
                                                     </span>
-
                                                 </div>
-
-                                                {/* LOCATION */}
 
                                                 {order.location && (
                                                     <div className="border-t pt-2 mt-2">
-
                                                         <p className="text-[10px] text-gray-500 mb-1.5">
                                                             Delivery Location
                                                         </p>
@@ -817,195 +644,113 @@ function AdminOrders() {
                                                         >
                                                             📍 View Live Location
                                                         </a>
-
                                                     </div>
                                                 )}
-
                                             </div>
-
                                         </div>
-
                                     </div>
 
-                                    {/* ==========================================
-                                        DETAILS
-                                    ========================================== */}
-
+                                    {/* DETAILS */}
                                     <div className="border-t px-3 py-2.5">
-
                                         <button
                                             onClick={() =>
                                                 setOpenOrder(
-                                                    openOrder ===
-                                                        order.id
+                                                    openOrder === order.id
                                                         ? null
                                                         : order.id
                                                 )
                                             }
                                             className="text-blue-600 font-semibold text-xs hover:underline"
                                         >
-                                            {openOrder ===
-                                                order.id
+                                            {openOrder === order.id
                                                 ? "Hide Details ↑"
                                                 : "View Details ↓"}
                                         </button>
 
-                                        {openOrder ===
-                                            order.id && (
-
-                                                <div className="mt-2.5 bg-gray-50 rounded-lg p-2.5">
-
-                                                    <div className="space-y-2 text-xs">
-
-                                                        {/* CUSTOMER */}
-
-                                                        <div className="flex justify-between gap-3">
-
-                                                            <span className="text-gray-500">
-                                                                Customer
-                                                            </span>
-
-                                                            <span className="font-semibold text-right">
-                                                                {
-                                                                    order.customer_name ||
-                                                                    "N/A"
-                                                                }
-                                                            </span>
-
-                                                        </div>
-
-                                                        {/* MOBILE */}
-
-                                                        <div className="flex justify-between gap-3">
-
-                                                            <span className="text-gray-500">
-                                                                Mobile
-                                                            </span>
-
-                                                            <span className="font-semibold text-right">
-                                                                {
-                                                                    order.mobile ||
-                                                                    "N/A"
-                                                                }
-                                                            </span>
-
-                                                        </div>
-
-                                                        {/* PAYMENT */}
-
-                                                        <div className="flex justify-between gap-3">
-
-                                                            <span className="text-gray-500">
-                                                                Payment
-                                                            </span>
-
-                                                            <span className="font-semibold">
-                                                                Cash on Delivery
-                                                            </span>
-
-                                                        </div>
-
-                                                        {/* STATUS */}
-
-                                                        <div className="flex justify-between gap-3">
-
-                                                            <span className="text-gray-500">
-                                                                Status
-                                                            </span>
-
-                                                            <span className="font-semibold capitalize">
-                                                                {
-                                                                    order.status ||
-                                                                    "pending"
-                                                                }
-                                                            </span>
-
-                                                        </div>
-
-                                                        {/* CANCELLATION */}
-
-                                                        {order.status ===
-                                                            "cancelled" && (
-
-                                                                <div className="mt-2 bg-red-50 border border-red-200 rounded-lg p-2">
-
-                                                                    <p className="text-[10px] text-red-500 font-semibold">
-                                                                        Cancellation Reason
-                                                                    </p>
-
-                                                                    <p className="text-red-700 font-medium text-xs">
-                                                                        {
-                                                                            order.cancellation_reason ||
-                                                                            "No reason provided"
-                                                                        }
-                                                                    </p>
-
-                                                                </div>
-
-                                                            )}
-
-                                                        {/* TOTAL */}
-
-                                                        <div className="border-t pt-2 flex justify-between gap-3">
-
-                                                            <span className="font-semibold">
-                                                                Total
-                                                            </span>
-
-                                                            <span className="font-bold text-green-600">
-                                                                ₹
-                                                                {
-                                                                    order.total_amount ??
-                                                                    0
-                                                                }
-                                                            </span>
-
-                                                        </div>
-
-                                                        {/* ADDRESS */}
-
-                                                        <div className="border-t pt-2">
-
-                                                            <p className="text-gray-500 mb-1">
-                                                                Address
-                                                            </p>
-
-                                                            <p className="font-semibold">
-                                                                {
-                                                                    order.address ||
-                                                                    "N/A"
-                                                                }
-                                                            </p>
-
-                                                        </div>
-
+                                        {openOrder === order.id && (
+                                            <div className="mt-2.5 bg-gray-50 rounded-lg p-2.5">
+                                                <div className="space-y-2 text-xs">
+                                                    <div className="flex justify-between gap-3">
+                                                        <span className="text-gray-500">
+                                                            Customer
+                                                        </span>
+                                                        <span className="font-semibold text-right">
+                                                            {order.customer_name ||
+                                                                "N/A"}
+                                                        </span>
                                                     </div>
 
+                                                    <div className="flex justify-between gap-3">
+                                                        <span className="text-gray-500">
+                                                            Mobile
+                                                        </span>
+                                                        <span className="font-semibold text-right">
+                                                            {order.mobile || "N/A"}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex justify-between gap-3">
+                                                        <span className="text-gray-500">
+                                                            Payment
+                                                        </span>
+                                                        <span className="font-semibold">
+                                                            {order.payment_method ||
+                                                                "Cash on Delivery"}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex justify-between gap-3">
+                                                        <span className="text-gray-500">
+                                                            Status
+                                                        </span>
+                                                        <span className="font-semibold capitalize">
+                                                            {order.status || "pending"}
+                                                        </span>
+                                                    </div>
+
+                                                    {order.status === "cancelled" && (
+                                                        <div className="mt-2 bg-red-50 border border-red-200 rounded-lg p-2">
+                                                            <p className="text-[10px] text-red-500 font-semibold">
+                                                                Cancellation Reason
+                                                            </p>
+                                                            <p className="text-red-700 font-medium text-xs">
+                                                                {order.cancellation_reason ||
+                                                                    "No reason provided"}
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="border-t pt-2 flex justify-between gap-3">
+                                                        <span className="font-semibold">
+                                                            Total
+                                                        </span>
+                                                        <span className="font-bold text-green-600">
+                                                            ₹{order.total_amount ?? 0}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="border-t pt-2">
+                                                        <p className="text-gray-500 mb-1">
+                                                            Address
+                                                        </p>
+                                                        <p className="font-semibold">
+                                                            {order.address || "N/A"}
+                                                        </p>
+                                                    </div>
                                                 </div>
-
-                                            )}
-
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* ==========================================
-                                        STATUS + DELETE
-                                    ========================================== */}
-
+                                    {/* STATUS + DELETE */}
                                     <div className="border-t bg-gray-50 p-3">
-
                                         <label className="block text-[11px] font-semibold text-gray-600 mb-1.5">
                                             Update Order Status
                                         </label>
 
                                         <select
-                                            value={
-                                                order.status ||
-                                                "pending"
-                                            }
-                                            disabled={
-                                                updating ===
-                                                order.id
-                                            }
+                                            value={order.status || "pending"}
+                                            disabled={updating === order.id}
                                             onChange={(e) =>
                                                 updateStatus(
                                                     order.id,
@@ -1014,69 +759,44 @@ function AdminOrders() {
                                             }
                                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"
                                         >
-
                                             <option value="pending">
                                                 Pending
                                             </option>
-
                                             <option value="confirmed">
                                                 Confirmed
                                             </option>
-
                                             <option value="shipped">
                                                 Shipped
                                             </option>
-
                                             <option value="delivered">
                                                 Delivered
                                             </option>
-
                                             <option value="cancelled">
                                                 Cancelled
                                             </option>
-
                                         </select>
 
-                                        {updating ===
-                                            order.id && (
-
-                                                <p className="text-xs text-blue-600 mt-1.5">
-                                                    Updating...
-                                                </p>
-
-                                            )}
-
-                                        {/* DELETE */}
+                                        {updating === order.id && (
+                                            <p className="text-xs text-blue-600 mt-1.5">
+                                                Updating...
+                                            </p>
+                                        )}
 
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                deleteOrder(
-                                                    order.id
-                                                )
-                                            }
-                                            disabled={
-                                                updating ===
-                                                order.id
-                                            }
+                                            onClick={() => deleteOrder(order.id)}
+                                            disabled={updating === order.id}
                                             className="w-full mt-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-3 py-2.5 rounded-lg font-semibold text-sm transition"
                                         >
                                             🗑️ Delete Order
                                         </button>
-
                                     </div>
-
                                 </div>
-
-                            )
-                        )}
-
+                            );
+                        })}
                     </div>
-
                 )}
-
             </div>
-
         </main>
     );
 }

@@ -22,7 +22,7 @@ body {
     --primary-dark: #1d4ed8;
     --primary-light: #eff6ff;
     --accent: #facc15;
-    --page-bg: #f9fafb;
+    --page-bg: #fafafa;
     --text-main: #111827;
 }
 
@@ -63,7 +63,7 @@ body {
     --primary-light: #374151;
     --accent: #facc15;
     --page-bg: #111827;
-    --text-main: #f9fafb;
+    --text-main: #5abedd;
 }
 
 /* =========================================================

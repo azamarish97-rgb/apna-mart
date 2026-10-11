@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import Footer from "./Footer";
+
 
 function MyOrders() {
     const [orders, setOrders] = useState([]);
@@ -431,15 +433,20 @@ function MyOrders() {
                                                 </button>
                                             )}
 
+                                            
+
                                         </div>
 
                                     </div>
 
                                 </div>
+                                
 
                             </div>
+                            
 
                         ))}
+                            <Footer />
 
                     </div>
                 )}
@@ -539,6 +546,7 @@ function MyOrders() {
                         </div>
 
                     </div>
+                   
 
                 </div>
 

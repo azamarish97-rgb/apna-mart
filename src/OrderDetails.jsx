@@ -1,11 +1,14 @@
+
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "./supabase";
+import Footer from "./Footer";
 
 function OrderDetails() {
     const { id } = useParams();
 
     const [order, setOrder] = useState(null);
+    const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -13,403 +16,403 @@ function OrderDetails() {
     }, [id]);
 
     const fetchOrder = async () => {
+        setLoading(true);
+
         try {
             const {
                 data: { user },
+                error: authError,
             } = await supabase.auth.getUser();
 
-            if (!user) {
-                setLoading(false);
-                return;
-            }
-
-            const { data, error } = await supabase
-                .from("orders")
-                .select("*")
-                .eq("id", id)
-                .eq("user_id", user.id)
-                .single();
-
-            if (error) {
-                console.error("ORDER DETAILS ERROR:", error);
+            if (authError || !user) {
                 setOrder(null);
+                setItems([]);
                 return;
             }
 
-            setOrder(data);
+            // Fetch order details
+            const { data: orderData, error: orderError } =
+                await supabase
+                    .from("orders")
+                    .select("*")
+                    .eq("id", id)
+                    .eq("user_id", user.id)
+                    .single();
 
+            if (orderError) {
+                console.error("ORDER ERROR:", orderError);
+                setOrder(null);
+                setItems([]);
+                return;
+            }
+
+            setOrder(orderData);
+
+            // Fetch products in this order
+            const { data: itemData, error: itemError } =
+                await supabase
+                    .from("order_items")
+                    .select("*")
+                    .eq("order_id", id)
+                    .order("id", { ascending: true });
+
+            if (itemError) {
+                console.error("ORDER ITEMS ERROR:", itemError);
+                setItems([]);
+                return;
+            }
+
+            setItems(itemData || []);
         } catch (error) {
-            console.error(error);
+            console.error("FETCH ORDER ERROR:", error);
         } finally {
             setLoading(false);
         }
     };
 
     const getStatusStyle = (status) => {
-        switch (status) {
-            case "pending":
-                return "bg-yellow-100 text-yellow-700";
+        const styles = {
+            pending: "bg-yellow-100 text-yellow-800",
+            confirmed: "bg-blue-100 text-blue-800",
+            shipped: "bg-purple-100 text-purple-800",
+            delivered: "bg-green-100 text-green-800",
+            cancelled: "bg-red-100 text-red-800",
+        };
 
-            case "confirmed":
-                return "bg-blue-100 text-blue-700";
-
-            case "shipped":
-                return "bg-purple-100 text-purple-700";
-
-            case "delivered":
-                return "bg-green-100 text-green-700";
-
-            case "cancelled":
-                return "bg-red-100 text-red-700";
-
-            default:
-                return "bg-gray-100 text-gray-700";
-        }
+        return (
+            styles[(status || "").toLowerCase()] ||
+            "bg-gray-100 text-gray-700"
+        );
     };
+
+    const getStatusStep = (status) => {
+        const steps = {
+            pending: 1,
+            confirmed: 2,
+            shipped: 3,
+            delivered: 4,
+        };
+
+        return steps[(status || "").toLowerCase()] || 0;
+    };
+
+    const formatPrice = (amount) =>
+        `₹${Number(amount || 0).toLocaleString("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        })}`;
 
     if (loading) {
         return (
-            <main className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto"></div>
-
-                    <p className="mt-4 font-semibold text-gray-600">
-                        Loading order...
+                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600">
+                        Loading your order...
                     </p>
                 </div>
-            </main>
+            </div>
         );
     }
 
     if (!order) {
         return (
-            <main className="min-h-screen bg-gray-50 flex items-center justify-center px-5">
-                <div className="bg-white rounded-2xl shadow-sm p-8 text-center max-w-md w-full">
+            <div className="min-h-screen flex flex-col items-center justify-center px-4">
+                <div className="text-5xl mb-4">📦</div>
 
-                    <div className="text-6xl mb-4">
-                        😕
-                    </div>
+                <h2 className="text-2xl font-bold text-gray-800">
+                    Order not found
+                </h2>
 
-                    <h1 className="text-2xl font-bold">
-                        Order Not Found
-                    </h1>
+                <p className="text-gray-500 mt-2 text-center">
+                    Please log in with the account used to place this order.
+                </p>
 
-                    <p className="text-gray-500 mt-2">
-                        This order doesn't exist or you don't have access to it.
-                    </p>
-
-                    <Link
-                        to="/my-orders"
-                        className="inline-block mt-6 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold"
-                    >
-                        ← My Orders
-                    </Link>
-
-                </div>
-            </main>
+                <Link
+                    to="/my-orders"
+                    className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700"
+                >
+                    My Orders
+                </Link>
+            </div>
         );
     }
 
+    const status = (order.status || "pending").toLowerCase();
+    const currentStep = getStatusStep(status);
 
-    const getStatusStep = (status) => {
-        switch (status) {
-            case "pending":
-                return 1;
-
-            case "confirmed":
-                return 2;
-
-            case "shipped":
-                return 3;
-
-            case "delivered":
-                return 4;
-
-            default:
-                return 1;
-        }
-    };
-
-    const currentStep = getStatusStep(order.status);
+    const itemsSubtotal = items.reduce(
+        (sum, item) =>
+            sum +
+            Number(item.price || 0) * Number(item.quantity || 0),
+        0
+    );
 
     return (
-        <main className="min-h-screen bg-gray-50 px-4 py-8">
+        <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6">
+            <div className="max-w-4xl mx-auto">
 
-            <div className="max-w-3xl mx-auto">
-
-                {/* Back */}
+                {/* Back Button */}
                 <Link
                     to="/my-orders"
-                    className="inline-flex items-center text-gray-600 hover:text-green-600 font-medium mb-6"
+                    className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-semibold mb-6"
                 >
                     ← Back to My Orders
                 </Link>
 
-                {/* Main Card */}
-                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                {/* Order Header */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7 mb-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-sm text-gray-500">
+                                Order ID
+                            </p>
 
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-green-600 to-emerald-500 text-white p-6">
-
-                        <p className="text-green-100 text-sm">
-                            ORDER ID
-                        </p>
-
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mt-1">
-
-                            <h1 className="text-3xl font-bold">
+                            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-all">
                                 #{order.id}
                             </h1>
 
-                            <span
-                                className={`px-4 py-2 rounded-full text-sm font-bold capitalize ${getStatusStyle(
-                                    order.status
-                                )}`}
-                            >
-                                {order.status}
-                            </span>
-
+                            <p className="text-sm text-gray-500 mt-2">
+                                Placed on{" "}
+                                {order.created_at
+                                    ? new Date(
+                                        order.created_at
+                                    ).toLocaleString("en-IN", {
+                                        dateStyle: "medium",
+                                        timeStyle: "short",
+                                    })
+                                    : "N/A"}
+                            </p>
                         </div>
 
-                        <p className="text-green-100 mt-3">
-                            🕒{" "}
-                            {new Date(
-                                order.created_at
-                            ).toLocaleString("en-IN")}
-                        </p>
-
+                        <span
+                            className={`self-start px-4 py-2 rounded-full text-sm font-bold capitalize ${getStatusStyle(
+                                status
+                            )}`}
+                        >
+                            {status}
+                        </span>
                     </div>
 
-                    {/* Order Status */}
-                    {/* Order Status */}
-                    <div className="p-6 border-b">
+                    {/* Order Progress */}
+                    {status !== "cancelled" && (
+                        <div className="mt-8">
+                            <div className="flex items-center justify-between gap-1">
+                                {[
+                                    "Pending",
+                                    "Confirmed",
+                                    "Shipped",
+                                    "Delivered",
+                                ].map((step, index) => {
+                                    const stepNumber = index + 1;
+                                    const completed =
+                                        currentStep >= stepNumber;
 
-                        <h2 className="text-xl font-bold mb-5">
-                            Order Status
+                                    return (
+                                        <div
+                                            key={step}
+                                            className="flex-1 text-center"
+                                        >
+                                            <div
+                                                className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${completed
+                                                        ? "bg-green-500 text-white"
+                                                        : "bg-gray-200 text-gray-500"
+                                                    }`}
+                                            >
+                                                {completed
+                                                    ? "✓"
+                                                    : stepNumber}
+                                            </div>
+
+                                            <p className="text-[10px] sm:text-xs mt-2 text-gray-600">
+                                                {step}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="h-2 bg-gray-200 rounded-full mt-3 overflow-hidden">
+                                <div
+                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                    style={{
+                                        width: `${Math.max(
+                                            0,
+                                            ((currentStep - 1) / 3) * 100
+                                        )}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Ordered Products */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7 mb-6 min-w-0">
+                    <div className="flex items-center justify-between gap-3 mb-5">
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+                            🛒 Ordered Products
                         </h2>
 
-                        {order.status === "cancelled" ? (
-
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-center">
-
-                                <div className="text-4xl mb-2">
-                                    ❌
-                                </div>
-
-                                <h3 className="font-bold text-red-600 text-lg">
-                                    Order Cancelled
-                                </h3>
-
-                                {order.cancel_reason && (
-                                    <p className="text-sm text-red-500 mt-2">
-                                        Reason: {order.cancel_reason}
-                                    </p>
-                                )}
-
-                            </div>
-
-                        ) : (
-
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-
-                                {/* Placed */}
-                                <div className="text-center">
-                                    <div
-                                        className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center font-bold ${currentStep >= 1
-                                                ? "bg-green-600 text-white"
-                                                : "bg-gray-200 text-gray-500"
-                                            }`}
-                                    >
-                                        ✓
-                                    </div>
-
-                                    <p
-                                        className={`mt-2 ${currentStep >= 1
-                                                ? "font-semibold text-green-600"
-                                                : "text-gray-500"
-                                            }`}
-                                    >
-                                        Placed
-                                    </p>
-                                </div>
-
-                                {/* Line */}
-                                <div
-                                    className={`h-1 flex-1 mx-2 ${currentStep >= 2
-                                            ? "bg-green-600"
-                                            : "bg-gray-200"
-                                        }`}
-                                ></div>
-
-                                {/* Confirmed */}
-                                <div className="text-center">
-                                    <div
-                                        className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center font-bold ${currentStep >= 2
-                                                ? "bg-green-600 text-white"
-                                                : "bg-gray-200 text-gray-500"
-                                            }`}
-                                    >
-                                        {currentStep >= 2 ? "✓" : "2"}
-                                    </div>
-
-                                    <p
-                                        className={`mt-2 ${currentStep >= 2
-                                                ? "font-semibold text-green-600"
-                                                : "text-gray-500"
-                                            }`}
-                                    >
-                                        Confirmed
-                                    </p>
-                                </div>
-
-                                {/* Line */}
-                                <div
-                                    className={`h-1 flex-1 mx-2 ${currentStep >= 3
-                                            ? "bg-green-600"
-                                            : "bg-gray-200"
-                                        }`}
-                                ></div>
-
-                                {/* Shipped */}
-                                <div className="text-center">
-                                    <div
-                                        className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center font-bold ${currentStep >= 3
-                                                ? "bg-green-600 text-white"
-                                                : "bg-gray-200 text-gray-500"
-                                            }`}
-                                    >
-                                        {currentStep >= 3 ? "✓" : "3"}
-                                    </div>
-
-                                    <p
-                                        className={`mt-2 ${currentStep >= 3
-                                                ? "font-semibold text-green-600"
-                                                : "text-gray-500"
-                                            }`}
-                                    >
-                                        Shipped
-                                    </p>
-                                </div>
-
-                                {/* Line */}
-                                <div
-                                    className={`h-1 flex-1 mx-2 ${currentStep >= 4
-                                            ? "bg-green-600"
-                                            : "bg-gray-200"
-                                        }`}
-                                ></div>
-
-                                {/* Delivered */}
-                                <div className="text-center">
-                                    <div
-                                        className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center font-bold ${currentStep >= 4
-                                                ? "bg-green-600 text-white"
-                                                : "bg-gray-200 text-gray-500"
-                                            }`}
-                                    >
-                                        {currentStep >= 4 ? "✓" : "4"}
-                                    </div>
-
-                                    <p
-                                        className={`mt-2 ${currentStep >= 4
-                                                ? "font-semibold text-green-600"
-                                                : "text-gray-500"
-                                            }`}
-                                    >
-                                        Delivered
-                                    </p>
-                                </div>
-
-                            </div>
-                        )}
-
+                        <span className="shrink-0 bg-blue-50 text-blue-700 text-xs sm:text-sm font-semibold px-3 py-1 rounded-full">
+                            {items.length}{" "}
+                            {items.length === 1 ? "item" : "items"}
+                        </span>
                     </div>
 
-                    {/* Customer */}
-                    <div className="p-6 border-b">
+                    {items.length === 0 ? (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-3">🛒</div>
 
-                        <h2 className="text-xl font-bold mb-4">
-                            👤 Customer Details
+                            <p className="font-semibold text-gray-700">
+                                No products found for this order
+                            </p>
+
+                            <p className="text-sm text-gray-500 mt-1">
+                                Check the order_items table and its
+                                access policies.
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Scrollable Products List */}
+                            <div className="max-h-64 overflow-y-auto overscroll-contain pr-2">
+                                <div className="divide-y divide-gray-100">
+                                    {items.map((item) => (
+                                        <div
+                                            key={item.id}
+                                            className="py-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
+                                        >
+                                            {/* Product Information */}
+                                            <div className="min-w-0">
+                                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base whitespace-normal break-words">
+                                                    {item.product_name ||
+                                                        "Unnamed Product"}
+                                                </h3>
+
+                                                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                                    Price:{" "}
+                                                    {formatPrice(item.price)}
+                                                </p>
+
+                                                <p className="text-xs sm:text-sm text-gray-500">
+                                                    Quantity: {item.quantity}
+                                                </p>
+                                            </div>
+
+                                            {/* Product Subtotal */}
+                                            <div className="text-right shrink-0">
+                                                <p className="font-bold text-gray-900 text-sm sm:text-base whitespace-nowrap">
+                                                    {formatPrice(
+                                                        Number(item.price || 0) *
+                                                        Number(
+                                                            item.quantity || 0
+                                                        )
+                                                    )}
+                                                </p>
+
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    Subtotal
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Products Subtotal - Always Visible */}
+                            <div className="border-t border-gray-200 pt-4 mt-3 flex justify-between items-center gap-4">
+                                <span className="text-sm sm:text-base text-gray-600 font-medium">
+                                    Products subtotal
+                                </span>
+
+                                <span className="font-bold text-gray-900 whitespace-nowrap">
+                                    {formatPrice(itemsSubtotal)}
+                                </span>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* Delivery and Payment Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+
+                    {/* Delivery Details */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">
+                            📍 Delivery Details
                         </h2>
 
                         <div className="space-y-3">
+                            <div>
+                                <p className="text-sm text-gray-500">
+                                    Name
+                                </p>
 
-                            <p>
-                                <span className="font-semibold">
-                                    Name:
-                                </span>{" "}
-                                {order.customer_name}
-                            </p>
-
-                            <p>
-                                <span className="font-semibold">
-                                    Mobile:
-                                </span>{" "}
-                                {order.mobile}
-                            </p>
-
-                        </div>
-
-                    </div>
-
-                    {/* Address */}
-                    <div className="p-6 border-b">
-
-                        <h2 className="text-xl font-bold mb-4">
-                            📍 Delivery Address
-                        </h2>
-
-                        <p className="text-gray-700 leading-relaxed">
-                            {order.address}
-                        </p>
-
-                    </div>
-
-                    {/* Payment */}
-                    <div className="p-6">
-
-                        <div className="flex justify-between items-center">
+                                <p className="font-semibold text-gray-800 break-words">
+                                    {order.customer_name || "N/A"}
+                                </p>
+                            </div>
 
                             <div>
                                 <p className="text-sm text-gray-500">
-                                    Payment
+                                    Mobile
                                 </p>
 
-                                <p className="font-semibold mt-1">
-                                    💵 Cash on Delivery
+                                <p className="font-semibold text-gray-800">
+                                    {order.mobile || "N/A"}
                                 </p>
                             </div>
 
-                            <div className="text-right">
-
+                            <div>
                                 <p className="text-sm text-gray-500">
-                                    Total Amount
+                                    Delivery Address
                                 </p>
 
-                                <p className="text-2xl font-bold text-green-600">
-                                    ₹{order.total_amount}
+                                <p className="font-semibold text-gray-800 whitespace-pre-line break-words">
+                                    {order.address || "N/A"}
                                 </p>
-
                             </div>
-
                         </div>
-
                     </div>
 
-                </div>
+                    {/* Payment Summary */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">
+                            💳 Payment Summary
+                        </h2>
 
-                {/* Footer */}
-                <div className="text-center mt-8 text-gray-500">
-                    Thank you for shopping with{" "}
-                    <span className="font-bold text-green-600">
-                        ApnaMart
-                    </span>{" "}
-                    🛒
-                </div>
+                        <div className="flex justify-between gap-3 mb-4">
+                            <span className="text-gray-600">
+                                Payment method
+                            </span>
 
+                            <span className="font-semibold text-gray-800 text-right">
+                                {order.payment_method ||
+                                    "Cash on Delivery"}
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between gap-3 border-t border-gray-100 pt-4">
+                            <span className="font-bold text-gray-900">
+                                Order Total
+                            </span>
+
+                            <span className="text-xl font-extrabold text-green-700 whitespace-nowrap">
+                                {formatPrice(order.total_amount)}
+                            </span>
+                        </div>
+
+                        <p className="text-xs text-gray-500 mt-3">
+                            The order total is taken from your saved
+                            order record.
+                        </p>
+                    </div>
+                </div>
             </div>
 
-        </main>
+            <Footer />
+        </div>
     );
 }
 

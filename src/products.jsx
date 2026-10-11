@@ -1,13 +1,26 @@
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "./supabase";
 import { useCart } from "./cartcontext";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
+
+const PAGE_SIZE = 5;
 
 function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
+
     const [searchParams] = useSearchParams();
-    const selectedCategory = searchParams.get("category"); // URL se category nikalega, jaise "Vegetable"
+    const navigate = useNavigate();
+
+    const selectedCategory = searchParams.get("category");
+
+    const sentinelRef = useRef(null);
+    const requestLockRef = useRef(false);
+    const nextPageRef = useRef(1);
 
     const {
         cart,
@@ -16,18 +29,88 @@ function Products() {
         increaseQuantity,
     } = useCart();
 
+    // ================= FETCH PRODUCTS =================
 
     useEffect(() => {
+        let cancelled = false;
+
         const getProducts = async () => {
             setLoading(true);
+            setLoadingMore(false);
+            setFetchError(false);
+            setHasMore(true);
+            setProducts([]);
+
+            nextPageRef.current = 1;
+            requestLockRef.current = false;
 
             let query = supabase
                 .from("products")
                 .select("*")
                 .eq("is_active", true)
-                .order("created_at", { ascending: false });
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: false })
+                .range(0, PAGE_SIZE - 1);
 
-            // ============ AGAR CATEGORY URL ME HAI TO FILTER KARO ============
+            if (selectedCategory) {
+                query = query.eq("category", selectedCategory);
+            }
+
+            const { data, error } = await query;
+
+            if (cancelled) return;
+
+            if (error) {
+                console.error("SUPABASE ERROR:", error);
+                setFetchError(true);
+                setHasMore(false);
+                setProducts([]);
+            } else {
+                const fetchedProducts = data || [];
+
+                setProducts(fetchedProducts);
+                nextPageRef.current = 1;
+                setHasMore(fetchedProducts.length === PAGE_SIZE);
+            }
+
+            setLoading(false);
+        };
+
+        getProducts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedCategory]);
+
+    // ================= LOAD NEXT 20 PRODUCTS =================
+
+    const loadMoreProducts = async () => {
+        if (
+            requestLockRef.current ||
+            loading ||
+            loadingMore ||
+            !hasMore ||
+            fetchError
+        ) {
+            return;
+        }
+
+        requestLockRef.current = true;
+        setLoadingMore(true);
+
+        const page = nextPageRef.current;
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        try {
+            let query = supabase
+                .from("products")
+                .select("*")
+                .eq("is_active", true)
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: false })
+                .range(from, to);
 
             if (selectedCategory) {
                 query = query.eq("category", selectedCategory);
@@ -36,51 +119,63 @@ function Products() {
             const { data, error } = await query;
 
             if (error) {
-                console.error("SUPABASE ERROR:", error);
-                setLoading(false);
+                console.error("LOAD MORE ERROR:", error);
                 return;
             }
 
-            setProducts(data || []);
-            setLoading(false);
-        };
+            const fetchedProducts = data || [];
 
-        getProducts();
-    }, [selectedCategory]); // selectedCategory change hone par dobara fetch karega
+            setProducts((previous) => [
+                ...previous,
+                ...fetchedProducts,
+            ]);
 
-    // ================= GET PRODUCTS =================
+            nextPageRef.current = page + 1;
+            setHasMore(fetchedProducts.length === PAGE_SIZE);
+        } finally {
+            requestLockRef.current = false;
+            setLoadingMore(false);
+        }
+    };
+
+    // ================= INFINITE SCROLL =================
 
     useEffect(() => {
-        const getProducts = async () => {
-            setLoading(true);
+        const sentinel = sentinelRef.current;
 
-            const { data, error } = await supabase
-                .from("products")
-                .select("*")
-                .eq("is_active", true)
-                .order("created_at", { ascending: false });
+        if (!sentinel || loading || !hasMore || fetchError) {
+            return;
+        }
 
-            if (error) {
-                console.error("SUPABASE ERROR:", error);
-                setLoading(false);
-                return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    loadMoreProducts();
+                }
+            },
+            {
+                rootMargin: "300px",
             }
+        );
 
-            console.log("ACTIVE PRODUCTS:", data);
+        observer.observe(sentinel);
 
-            setProducts(data || []);
-            setLoading(false);
-        };
-
-        getProducts();
-    }, []);
+        return () => observer.disconnect();
+    }, [
+        loading,
+        hasMore,
+        fetchError,
+        products.length,
+        selectedCategory,
+    ]);
 
     // ================= DISCOUNT =================
 
     const getDiscount = (price, offerPrice) => {
         if (
-            !price ||
-            !offerPrice ||
+            price == null ||
+            offerPrice == null ||
+            Number(price) <= 0 ||
             Number(offerPrice) >= Number(price)
         ) {
             return 0;
@@ -93,58 +188,76 @@ function Products() {
         );
     };
 
-    // ================= LOADING =================
+    // ================= INITIAL LOADING =================
 
     if (loading) {
         return (
             <main className="min-h-screen bg-gray-50 px-5 py-10">
                 <div className="max-w-6xl mx-auto">
-
                     <div className="flex justify-center items-center py-20">
                         <div className="text-center">
-
-                            <div className="w-10 h-10 border-4 border-gray-300 border-t-green-600 rounded-full animate-spin mx-auto"></div>
+                            <div className="w-10 h-10 border-4 border-gray-300 border-t-green-600 rounded-full animate-spin mx-auto" />
 
                             <h2 className="text-lg font-semibold text-gray-700 mt-4">
                                 Loading products...
                             </h2>
-
                         </div>
                     </div>
-
                 </div>
             </main>
         );
     }
 
-    // ================= UI =================
+    // ================= MAIN UI =================
 
     return (
         <main className="bg-gray-50 min-h-screen px-4 sm:px-5 py-8 sm:py-10">
-
             <div className="max-w-7xl mx-auto">
 
-                {/* ================= HEADING ================= */}
+                {/* HEADING */}
 
                 <div className="mb-7 sm:mb-8">
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
-                        {selectedCategory ? `${selectedCategory} 🛒` : "All Products 🛒"}
+                        {selectedCategory
+                            ? `${selectedCategory} 🛒`
+                            : "All Products 🛒"}
                     </h1>
 
                     <p className="text-gray-500 mt-1">
                         Fresh products at the best prices
                     </p>
 
+                    <p className="text-sm text-gray-400 mt-2">
+                        Showing {products.length} products
+                    </p>
                 </div>
 
-                {/* ================= NO PRODUCTS ================= */}
+                {/* FETCH ERROR */}
 
-                {products.length === 0 ? (
+                {fetchError ? (
                     <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+                        <div className="text-5xl mb-4">⚠️</div>
 
-                        <div className="text-6xl mb-4">
-                            📦
-                        </div>
+                        <h2 className="text-xl font-bold text-gray-700">
+                            Unable to load products
+                        </h2>
+
+                        <p className="text-gray-500 mt-2">
+                            Please check your connection and try again.
+                        </p>
+
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="mt-5 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700"
+                        >
+                            Try Again
+                        </button>
+                    </div>
+                ) : products.length === 0 ? (
+                    /* NO PRODUCTS */
+
+                    <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+                        <div className="text-6xl mb-4">📦</div>
 
                         <h2 className="text-xl font-bold text-gray-700">
                             No products available
@@ -153,229 +266,256 @@ function Products() {
                         <p className="text-gray-500 mt-2">
                             Please check again later.
                         </p>
-
                     </div>
                 ) : (
+                    <>
+                        {/* PRODUCT GRID */}
 
-                    /* ================= PRODUCT GRID ================= */
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+                            {products.map((product) => {
+                                const discount = getDiscount(
+                                    product.price,
+                                    product.offer_price
+                                );
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+                                const hasOffer =
+                                    product.offer_price != null &&
+                                    Number(product.offer_price) <
+                                    Number(product.price);
 
-                        {products.map((product) => {
+                                const stock = Math.max(
+                                    0,
+                                    Number(product.stock) || 0
+                                );
 
-                            const discount = getDiscount(
-                                product.price,
-                                product.offer_price
-                            );
+                                const cartItem = cart.find(
+                                    (item) => item.id === product.id
+                                );
 
-                            const hasOffer =
-                                product.offer_price !== null &&
-                                Number(product.offer_price) <
-                                Number(product.price);
+                                return (
+                                    <div
+                                        key={product.id}
+                                        onClick={() =>
+                                            navigate(`/product/${product.id}`)
+                                        }
+                                        className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition duration-300 border border-gray-100 cursor-pointer"
+                                    >
+                                        {/* IMAGE */}
 
-                            const stock = Number(product.stock);
+                                        <div className="relative h-40 sm:h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                                            {product.image_url ? (
+                                                <img
+                                                    src={product.image_url}
+                                                    alt={product.name || "Product"}
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    className="w-full h-full object-cover hover:scale-105 transition duration-300"
+                                                    onError={(e) => {
+                                                        e.currentTarget.style.display =
+                                                            "none";
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span className="text-5xl">
+                                                    🛒
+                                                </span>
+                                            )}
 
-                            const cartItem = cart.find(
-                                (item) =>
-                                    item.id === product.id
-                            );
+                                            {/* DISCOUNT BADGE */}
 
-                            return (
-                                <div
-                                    key={product.id}
-                                    className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition duration-300 border border-gray-100"
-                                >
+                                            {hasOffer && discount > 0 && (
+                                                <span className="absolute top-2 left-2 bg-red-500 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-lg">
+                                                    {discount}% OFF
+                                                </span>
+                                            )}
+                                        </div>
 
-                                    {/* ================= IMAGE ================= */}
+                                        {/* PRODUCT CONTENT */}
 
-                                    <div className="relative h-40 sm:h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                                        <div className="p-3 sm:p-4">
+                                            {/* CATEGORY */}
 
-                                        {product.image_url ? (
-                                            <img
-                                                src={product.image_url}
-                                                alt={product.name}
-                                                className="w-full h-full object-cover hover:scale-105 transition duration-300"
-                                                onError={(e) => {
-                                                    e.currentTarget.style.display =
-                                                        "none";
-                                                }}
-                                            />
-                                        ) : (
-                                            <span className="text-5xl">
-                                                🛒
-                                            </span>
-                                        )}
-
-                                        {/* DISCOUNT BADGE */}
-
-                                        {hasOffer && discount > 0 && (
-                                            <span className="absolute top-2 left-2 bg-red-500 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-lg">
-                                                {discount}% OFF
-                                            </span>
-                                        )}
-
-                                    </div>
-
-                                    {/* ================= CONTENT ================= */}
-
-                                    <div className="p-3 sm:p-4">
-
-                                        {/* CATEGORY */}
-
-                                        <p className="text-xs sm:text-sm text-gray-500 truncate">
-                                            {product.category ||
-                                                "Grocery"}
-                                        </p>
-
-                                        {/* NAME */}
-
-                                        <h2 className="font-semibold text-base sm:text-lg text-gray-800 mt-1 line-clamp-2 min-h-[40px]">
-                                            {product.name}
-                                        </h2>
-
-
-                                        {product.weight && (
-                                            <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                                                {product.weight}
+                                            <p className="text-xs sm:text-sm text-gray-500 truncate">
+                                                {product.category || "Grocery"}
                                             </p>
-                                        )}
 
-                                        {/* DESCRIPTION */}
+                                            {/* NAME */}
 
-                                        {product.description && (
-                                            <p className="text-xs sm:text-sm text-gray-500 mt-2 line-clamp-2">
-                                                {product.description}
-                                            </p>
-                                        )}
+                                            <h2 className="font-semibold text-base sm:text-lg text-gray-800 mt-1 line-clamp-2 min-h-[40px]">
+                                                {product.name}
+                                            </h2>
 
-                                        {/* ================= PRICE ================= */}
+                                            {/* WEIGHT */}
 
-                                        <div className="mt-3">
+                                            {product.weight && (
+                                                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                                    {product.weight}
+                                                </p>
+                                            )}
 
-                                            {hasOffer ? (
-                                                <div className="flex items-center gap-2 flex-wrap">
+                                            {/* DESCRIPTION */}
 
-                                                    {/* OFFER PRICE */}
+                                            {product.description && (
+                                                <p className="text-xs sm:text-sm text-gray-500 mt-2 line-clamp-2">
+                                                    {product.description}
+                                                </p>
+                                            )}
 
+                                            {/* PRICE */}
+
+                                            <div className="mt-3">
+                                                {hasOffer ? (
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-lg sm:text-xl font-bold text-green-600">
+                                                            ₹{product.offer_price}
+                                                        </span>
+
+                                                        <span className="text-xs sm:text-sm text-gray-400 line-through">
+                                                            ₹{product.price}
+                                                        </span>
+                                                    </div>
+                                                ) : (
                                                     <span className="text-lg sm:text-xl font-bold text-green-600">
-                                                        ₹
-                                                        {
-                                                            product.offer_price
-                                                        }
-                                                    </span>
-
-                                                    {/* ORIGINAL PRICE */}
-
-                                                    <span className="text-xs sm:text-sm text-gray-400 line-through">
                                                         ₹{product.price}
                                                     </span>
-
-                                                </div>
-                                            ) : (
-                                                <span className="text-lg sm:text-xl font-bold text-green-600">
-                                                    ₹{product.price}
-                                                </span>
-                                            )}
-
-                                        </div>
-
-                                        {/* ================= STOCK ================= */}
-
-                                        <div className="mt-2">
-
-                                            {stock > 0 ? (
-                                                <p className="text-xs sm:text-sm text-gray-600">
-                                                    📦 Stock: {stock}
-                                                </p>
-                                            ) : (
-                                                <p className="text-xs sm:text-sm font-semibold text-red-600">
-                                                    ❌ Out of Stock
-                                                </p>
-                                            )}
-
-                                        </div>
-
-                                        {/* ================= CART ================= */}
-
-                                        {stock > 0 && cartItem ? (
-
-                                            <div className="flex items-center justify-between mt-4 border border-gray-200 rounded-xl overflow-hidden">
-
-                                                {/* MINUS */}
-
-                                                <button
-                                                    onClick={() =>
-                                                        decreaseQuantity(
-                                                            product.id
-                                                        )
-                                                    }
-                                                    className="w-10 sm:w-12 py-2.5 bg-gray-100 text-xl font-bold text-gray-700 hover:bg-gray-200 transition"
-                                                >
-                                                    −
-                                                </button>
-
-                                                {/* QUANTITY */}
-
-                                                <span className="font-bold text-gray-800">
-                                                    {cartItem.quantity}
-                                                </span>
-
-                                                {/* PLUS */}
-
-                                                <button
-                                                    onClick={() =>
-                                                        increaseQuantity(
-                                                            product.id
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        cartItem.quantity >=
-                                                        stock
-                                                    }
-                                                    className="w-10 sm:w-12 py-2.5 bg-green-600 text-white text-xl font-bold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                                                >
-                                                    +
-                                                </button>
-
+                                                )}
                                             </div>
 
-                                        ) : stock > 0 ? (
+                                            {/* STOCK */}
 
-                                            /* ================= ADD TO CART ================= */
+                                            <div className="mt-2">
+                                                {stock > 0 ? (
+                                                    <p className="text-xs sm:text-sm text-gray-600">
+                                                        📦 Stock: {stock}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-xs sm:text-sm font-semibold text-red-600">
+                                                        ❌ Out of Stock
+                                                    </p>
+                                                )}
+                                            </div>
 
-                                            <button
-                                                onClick={() =>
-                                                    addToCart(product)
-                                                }
-                                                className="w-full mt-4 bg-green-600 text-white py-2.5 rounded-xl font-semibold hover:bg-green-700 active:scale-95 transition"
-                                            >
-                                                🛒 Add to Cart
-                                            </button>
+                                            {/* CART */}
 
-                                        ) : (
+                                            {stock > 0 && cartItem ? (
+                                                <div
+                                                    onClick={(e) =>
+                                                        e.stopPropagation()
+                                                    }
+                                                    className="flex items-center justify-between mt-4 border border-gray-200 rounded-xl overflow-hidden"
+                                                >
+                                                    {/* MINUS */}
 
-                                            /* ================= OUT OF STOCK BUTTON ================= */
+                                                    <button
+                                                        onClick={() =>
+                                                            decreaseQuantity(
+                                                                product.id
+                                                            )
+                                                        }
+                                                        className="w-10 sm:w-12 py-2.5 bg-gray-100 text-xl font-bold text-gray-700 hover:bg-gray-200 transition"
+                                                    >
+                                                        −
+                                                    </button>
 
-                                            <button
-                                                disabled
-                                                className="w-full mt-4 bg-gray-200 text-gray-500 py-2.5 rounded-xl font-semibold cursor-not-allowed"
-                                            >
-                                                Out of Stock
-                                            </button>
+                                                    {/* QUANTITY */}
 
-                                        )}
+                                                    <span className="font-bold text-gray-800">
+                                                        {cartItem.quantity}
+                                                    </span>
 
+                                                    {/* PLUS */}
+
+                                                    <button
+                                                        onClick={() =>
+                                                            increaseQuantity(
+                                                                product.id
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            cartItem.quantity >=
+                                                            stock
+                                                        }
+                                                        className="w-10 sm:w-12 py-2.5 bg-green-600 text-white text-xl font-bold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </div>
+                                            ) : stock > 0 ? (
+                                                /* ADD TO CART */
+
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        addToCart(product);
+                                                    }}
+                                                    className="w-full mt-4 bg-green-600 text-white py-2.5 rounded-xl font-semibold hover:bg-green-700 active:scale-95 transition"
+                                                >
+                                                    🛒 Add to Cart
+                                                </button>
+                                            ) : (
+                                                /* OUT OF STOCK */
+
+                                                <button
+                                                    disabled
+                                                    onClick={(e) =>
+                                                        e.stopPropagation()
+                                                    }
+                                                    className="w-full mt-4 bg-gray-200 text-gray-500 py-2.5 rounded-xl font-semibold cursor-not-allowed"
+                                                >
+                                                    Out of Stock
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
+                                );
+                            })}
+                        </div>
 
-                                </div>
-                            );
-                        })}
+                        {/* INFINITE SCROLL SENTINEL */}
 
-                    </div>
+                        {hasMore && (
+                            <div
+                                ref={sentinelRef}
+                                className="h-10"
+                                aria-hidden="true"
+                            />
+                        )}
+
+                        {/* LOADING MORE */}
+
+                        {loadingMore && (
+                            <div className="flex justify-center items-center gap-3 py-6">
+                                <div className="w-6 h-6 border-4 border-gray-300 border-t-green-600 rounded-full animate-spin" />
+
+                                <p className="text-gray-500 text-sm">
+                                    Loading more products...
+                                </p>
+                            </div>
+                        )}
+
+                        {/* LOAD ERROR / RETRY */}
+
+                        {!loadingMore && hasMore && !fetchError && (
+                            <div className="text-center py-4">
+                                <button
+                                    onClick={loadMoreProducts}
+                                    className="text-green-700 font-semibold hover:underline"
+                                >
+                                    Load more products
+                                </button>
+                            </div>
+                        )}
+
+                        {/* END OF PRODUCTS */}
+
+                        {!hasMore && products.length > 0 && (
+                            <p className="text-center text-gray-400 text-sm py-8">
+                                🎉 You have seen all products!
+                            </p>
+                        )}
+                    </>
                 )}
-
             </div>
-
         </main>
     );
 }

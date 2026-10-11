@@ -22,8 +22,7 @@ import ResetPassword from "./ResetPassword";
 import AdminDashboard from "./AdminDashboard";
 import Search from "./Search";
 import BottomNav from "./BottomNav";
-
-// ================= LAYOUT WRAPPER =================
+import WelcomeScreen from "./WelcomeScreen";
 
 function AppLayout() {
   const location = useLocation();
@@ -31,107 +30,44 @@ function AppLayout() {
   const hideNavRoutes = ["/search"];
 
   const hideNav =
-    hideNavRoutes.includes(location.pathname);
+    hideNavRoutes.includes(location.pathname) ||
+    location.pathname.startsWith("/product/");
 
   return (
     <>
       {!hideNav && <Navbar />}
 
-      <Routes>
-
-        {/* User Pages */}
-
-        <Route
-          path="/"
-          element={<Home />}
-        />
-
-        <Route
-          path="/products"
-          element={<Products />}
-        />
-
-        {/* Product Profile */}
-
-        <Route
-          path="/product/:id"
-          element={<ProductDetails />}
-        />
-
-        <Route
-          path="/cart"
-          element={<Cart />}
-        />
-
-        <Route
-          path="/login"
-          element={<Login />}
-        />
-
-        <Route
-          path="/signup"
-          element={<Signup />}
-        />
-
-        <Route
-          path="/order-success"
-          element={<OrderSuccess />}
-        />
-
-        <Route
-          path="/my-orders"
-          element={<MyOrders />}
-        />
-
-        <Route
-          path="/order/:id"
-          element={<OrderDetails />}
-        />
-
-        {/* Admin Pages */}
-
-        <Route
-          path="/admin-login"
-          element={<AdminLogin />}
-        />
-
-        <Route
-          path="/admin/orders"
-          element={<AdminOrders />}
-        />
-
-        <Route
-          path="/reset-password"
-          element={<ResetPassword />}
-        />
-
-        <Route
-          path="/admin/dashboard"
-          element={<AdminDashboard />}
-        />
-
-        <Route
-          path="/search"
-          element={<Search />}
-        />
-
-      </Routes>
+      <main className={!hideNav ? "pt-[250px] md:pt-[390px]" : ""}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/product/:id" element={<ProductDetails />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/my-orders" element={<MyOrders />} />
+          <Route path="/order/:id" element={<OrderDetails />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/admin/orders" element={<AdminOrders />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/search" element={<Search />} />
+        </Routes>
+      </main>
 
       {!hideNav && <BottomNav />}
     </>
   );
 }
 
-// ================= APP =================
-
 function App() {
   return (
     <CartProvider>
-
       <BrowserRouter>
         <AppLayout />
+        <WelcomeScreen />
       </BrowserRouter>
-
     </CartProvider>
   );
 }

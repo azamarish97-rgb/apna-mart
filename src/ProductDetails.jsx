@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import Banner from "./Banner";
-import OfferStrip from "./OfferStrip";
-import DealsSection from "./DealsSection";
+// import Banner from "./Banner";
+// import OfferStrip from "./OfferStrip";
+// import DealsSection from "./DealsSection";
 
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -85,6 +85,7 @@ function ProductDetails() {
                     pb-24
                 "
             >
+                
                 <div className="max-w-6xl mx-auto">
 
                     {/* Back skeleton */}
@@ -335,6 +336,8 @@ function ProductDetails() {
                 pb-24
             "
         >
+
+            
             <div className="max-w-6xl mx-auto">
 
                 {/* ==================================
@@ -977,4 +980,4 @@ function ProductDetails() {
     );
 }
 
-export default ProductDetails;
+export default ProductDetails; 

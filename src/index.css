@@ -102,3 +102,22 @@ section {
         color 0.25s ease,
         border-color 0.25s ease;
 }
+
+/* 🌈 APNA MART ANIMATED GRADIENT */
+
+@keyframes gradient {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient 6s ease infinite;
+}

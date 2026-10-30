@@ -1,23 +1,17 @@
 import { useEffect, useState } from "react";
-// import Banner from "./Banner";
-// import OfferStrip from "./OfferStrip";
-// import DealsSection from "./DealsSection";
-
 import { useNavigate, useParams } from "react-router-dom";
-
 import {
     ArrowLeft,
     ShoppingCart,
     Plus,
     Minus,
     Package,
-    Check,
     Truck,
     ShieldCheck,
+    BadgePercent,
 } from "lucide-react";
 
 import { supabase } from "./supabase";
-
 import { useCart } from "./cartcontext";
 
 function ProductDetails() {
@@ -33,14 +27,15 @@ function ProductDetails() {
 
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [imageFailed, setImageFailed] = useState(false);
+    const [descOpen, setDescOpen] = useState(false);
 
-    // ==========================================
-    // FETCH PRODUCT
-    // ==========================================
-
+    // Fetch product
     useEffect(() => {
         const getProduct = async () => {
             setLoading(true);
+            setImageFailed(false);
+            setDescOpen(false);
 
             const { data, error } = await supabase
                 .from("products")
@@ -50,11 +45,7 @@ function ProductDetails() {
                 .single();
 
             if (error) {
-                console.error(
-                    "PRODUCT DETAILS ERROR:",
-                    error
-                );
-
+                console.error("PRODUCT DETAILS ERROR:", error);
                 setProduct(null);
                 setLoading(false);
                 return;
@@ -69,197 +60,40 @@ function ProductDetails() {
         }
     }, [id]);
 
-    // ==========================================
-    // LOADING
-    // ==========================================
-
     if (loading) {
         return (
-            <main
-                className="
-                    min-h-screen
-                    bg-[var(--page-bg)]
-                    px-4
-                    sm:px-5
-                    py-5
-                    pb-24
-                "
-            >
-                
-                <div className="max-w-6xl mx-auto">
-
-                    {/* Back skeleton */}
-
-                    <div
-                        className="
-                            h-9
-                            w-24
-                            bg-[var(--primary-light)]
-                            rounded-xl
-                            animate-pulse
-                            mb-5
-                        "
-                    />
-
-                    <div
-                        className="
-                            bg-white
-                            rounded-3xl
-                            overflow-hidden
-                            border
-                            border-gray-100
-                            shadow-sm
-                            grid
-                            md:grid-cols-2
-                        "
-                    >
-                        {/* Image skeleton */}
-
-                        <div
-                            className="
-                                h-[320px]
-                                sm:h-[460px]
-                                bg-[var(--primary-light)]
-                                animate-pulse
-                            "
-                        />
-
-                        {/* Content skeleton */}
-
-                        <div className="p-6 sm:p-8 space-y-5">
-
-                            <div
-                                className="
-                                    h-7
-                                    w-24
-                                    bg-[var(--primary-light)]
-                                    rounded-full
-                                    animate-pulse
-                                "
-                            />
-
-                            <div
-                                className="
-                                    h-10
-                                    w-4/5
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    animate-pulse
-                                "
-                            />
-
-                            <div
-                                className="
-                                    h-6
-                                    w-24
-                                    bg-[var(--primary-light)]
-                                    rounded-lg
-                                    animate-pulse
-                                "
-                            />
-
-                            <div
-                                className="
-                                    h-12
-                                    w-48
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    animate-pulse
-                                "
-                            />
-
-                            <div
-                                className="
-                                    h-24
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    animate-pulse
-                                "
-                            />
-
-                            <div
-                                className="
-                                    h-12
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    animate-pulse
-                                "
-                            />
-                        </div>
+            <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6">
+                <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2">
+                    <div className="aspect-square animate-pulse rounded-[2rem] bg-slate-200" />
+                    <div className="space-y-5 rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
+                        <div className="h-6 w-28 animate-pulse rounded-full bg-slate-200" />
+                        <div className="h-10 w-4/5 animate-pulse rounded-xl bg-slate-200" />
+                        <div className="h-7 w-1/3 animate-pulse rounded-lg bg-slate-200" />
+                        <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+                        <div className="h-14 animate-pulse rounded-2xl bg-slate-200" />
+                        <div className="h-14 animate-pulse rounded-2xl bg-slate-200" />
                     </div>
                 </div>
             </main>
         );
     }
 
-    // ==========================================
-    // PRODUCT NOT FOUND
-    // ==========================================
-
     if (!product) {
         return (
-            <main
-                className="
-                    min-h-screen
-                    bg-[var(--page-bg)]
-                    flex
-                    items-center
-                    justify-center
-                    px-4
-                    pb-24
-                "
-            >
-                <div className="text-center">
-
-                    <div
-                        className="
-                            w-24
-                            h-24
-                            bg-[var(--primary-light)]
-                            rounded-full
-                            flex
-                            items-center
-                            justify-center
-                            mx-auto
-                            mb-5
-                        "
-                    >
-                        <Package
-                            size={40}
-                            className="text-[var(--primary)]"
-                        />
+            <main className="flex min-h-[70vh] items-center justify-center bg-slate-50 px-4">
+                <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                        <Package size={30} />
                     </div>
-
-                    <h2
-                        className="
-                            text-2xl
-                            font-bold
-                            text-[var(--text-main)]
-                        "
-                    >
+                    <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
                         Product Not Found
                     </h2>
-
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="mt-2 text-sm text-slate-500">
                         Ye product abhi available nahi hai.
                     </p>
-
                     <button
-                        onClick={() =>
-                            navigate("/products")
-                        }
-                        className="
-                            mt-6
-                            bg-[var(--primary)]
-                            hover:bg-[var(--primary-dark)]
-                            text-white
-                            px-6
-                            py-3
-                            rounded-xl
-                            font-semibold
-                            transition
-                            active:scale-95
-                        "
+                        onClick={() => navigate("/products")}
+                        className="mt-6 inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
                     >
                         Back to Products
                     </button>
@@ -268,16 +102,13 @@ function ProductDetails() {
         );
     }
 
-    // ==========================================
-    // PRODUCT DATA
-    // ==========================================
-
+    // Product data
     const price = Number(product.price) || 0;
 
     const offerPrice =
         product.offer_price !== null &&
-            product.offer_price !== undefined &&
-            product.offer_price !== ""
+        product.offer_price !== undefined &&
+        product.offer_price !== ""
             ? Number(product.offer_price)
             : null;
 
@@ -286,698 +117,273 @@ function ProductDetails() {
         offerPrice > 0 &&
         offerPrice < price;
 
-    const finalPrice = hasOffer
-        ? offerPrice
-        : price;
+    const finalPrice = hasOffer ? offerPrice : price;
 
     const discount = hasOffer
-        ? Math.round(
-            ((price - offerPrice) / price) * 100
-        )
+        ? Math.round(((price - offerPrice) / price) * 100)
         : 0;
 
-    const savedAmount = hasOffer
-        ? price - finalPrice
-        : 0;
-
+    const savedAmount = hasOffer ? price - finalPrice : 0;
     const stock = Number(product.stock) || 0;
 
     const cartItem = cart.find(
-        (item) =>
-            String(item.id) === String(product.id)
+        (item) => String(item.id) === String(product.id)
     );
 
     const quantity = cartItem?.quantity || 0;
+    const longDescription = (product.description || "").length > 140;
 
-    // ==========================================
-    // CART
-    // ==========================================
-
+    // Cart
     const handleAddToCart = () => {
         if (stock <= 0) return;
-
         addToCart(product);
     };
 
-    // ==========================================
-    // UI
-    // ==========================================
-
     return (
-        <main
-            className="
-                min-h-screen
-                bg-[var(--page-bg)]
-                text-[var(--text-main)]
-                px-4
-                sm:px-5
-                py-4
-                sm:py-6
-                pb-24
-            "
-        >
-
-            
-            <div className="max-w-6xl mx-auto">
-
-                {/* ==================================
-                    BACK BUTTON
-                ================================== */}
-
+        <main className="min-h-screen bg-slate-50 pb-10 text-slate-900">
+            <div className="mx-auto max-w-6xl px-0 sm:px-5 sm:py-6 lg:px-6">
+                {/* Desktop back navigation */}
                 <button
                     onClick={() => navigate(-1)}
-                    className="
-                        group
-                        flex
-                        items-center
-                        gap-2
-                        text-sm
-                        font-semibold
-                        text-[var(--primary)]
-                        mb-4
-                        px-3
-                        py-2
-                        rounded-xl
-                        hover:bg-[var(--primary-light)]
-                        transition
-                    "
+                    className="mb-5 hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-slate-950 md:inline-flex"
                 >
-                    <ArrowLeft
-                        size={18}
-                        className="
-                            group-hover:-translate-x-1
-                            transition
-                        "
-                    />
-
+                    <ArrowLeft size={18} />
                     Back
                 </button>
 
-                {/* ==================================
-                    PRODUCT CARD
-                ================================== */}
+                <div className="grid items-start gap-0 md:grid-cols-2 md:gap-7">
+                    {/* Product image */}
+                    <section className="relative isolate aspect-square w-full overflow-hidden bg-white sm:rounded-[2rem] md:sticky md:top-6 md:border md:border-slate-200">
+                        <button
+                            onClick={() => navigate(-1)}
+                            aria-label="Go back"
+                            className="absolute left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-800 shadow-sm backdrop-blur transition hover:bg-white active:scale-95 md:hidden"
+                        >
+                            <ArrowLeft size={19} />
+                        </button>
 
-                <div
-                    className="
-                        bg-white
-                        rounded-3xl
-                        shadow-sm
-                        border
-                        border-gray-100
-                        overflow-hidden
-                        grid
-                        md:grid-cols-2
-                    "
-                >
+                        {discount > 0 && (
+                            <div className="absolute right-4 top-4 z-30 inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-3.5 py-2 text-xs font-extrabold text-white shadow-lg shadow-rose-600/20 sm:right-5 sm:top-5">
+                                <BadgePercent size={15} />
+                                {discount}% OFF
+                            </div>
+                        )}
 
-                    {/* ==================================
-                        IMAGE SECTION
-                    ================================== */}
-
-                    <div
-                        className="
-                            relative
-                            bg-[var(--primary-light)]
-                            min-h-[320px]
-                            sm:min-h-[460px]
-                            flex
-                            items-center
-                            justify-center
-                            overflow-hidden
-                        "
-                    >
-                        {/* Decorative background */}
-
-                        <div
-                            className="
-                                absolute
-                                -top-20
-                                -right-20
-                                w-56
-                                h-56
-                                rounded-full
-                                bg-white/40
-                            "
-                        />
-
-                        <div
-                            className="
-                                absolute
-                                -bottom-24
-                                -left-20
-                                w-64
-                                h-64
-                                rounded-full
-                                bg-white/30
-                            "
-                        />
-
-                        {product.image_url ? (
-                            <img
-                                src={product.image_url}
-                                alt={product.name}
-                                className="
-                                    relative
-                                    z-10
-                                    w-full
-                                    h-full
-                                    max-h-[500px]
-                                    object-contain
-                                    p-6
-                                    sm:p-10
-                                    drop-shadow-xl
-                                "
-                            />
+                        {product.image_url && !imageFailed ? (
+                            <>
+                                <img
+                                    src={product.image_url}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-3xl"
+                                />
+                                <img
+                                    src={product.image_url}
+                                    alt={product.name}
+                                    onError={() => setImageFailed(true)}
+                                    className="absolute inset-0 z-10 h-full w-full object-contain  sm:p-10"
+                                />
+                            </>
                         ) : (
-                            <div
-                                className="
-                                    relative
-                                    z-10
-                                    text-center
-                                "
-                            >
-                                <div className="text-7xl">
-                                    🛒
-                                </div>
-
-                                <p className="text-sm text-gray-500 mt-3">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 text-center">
+                                <span className="text-6xl">🛒</span>
+                                <p className="mt-3 text-sm font-medium text-slate-500">
                                     No Image Available
                                 </p>
                             </div>
                         )}
+                    </section>
 
-                        {/* DISCOUNT BADGE */}
-
-                        {discount > 0 && (
-                            <div
-                                className="
-                                    absolute
-                                    z-20
-                                    top-4
-                                    left-4
-                                    bg-[var(--primary)]
-                                    text-white
-                                    px-3
-                                    py-2
-                                    rounded-xl
-                                    shadow-lg
-                                "
-                            >
-                                <span
-                                    className="
-                                        text-sm
-                                        font-extrabold
-                                    "
-                                >
-                                    {discount}% OFF
-                                </span>
-                            </div>
-                        )}
-
-                        {/* STOCK BADGE */}
-
-                        <div
-                            className="
-                                absolute
-                                z-20
-                                bottom-4
-                                left-4
-                            "
-                        >
-                            {stock > 0 ? (
-                                <span
-                                    className="
-                                        inline-flex
-                                        items-center
-                                        gap-1.5
-                                        bg-white
-                                        text-green-600
-                                        px-3
-                                        py-2
-                                        rounded-xl
-                                        text-xs
-                                        font-bold
-                                        shadow-md
-                                    "
-                                >
-                                    <Check size={15} />
-                                    In Stock
+                    {/* Product information */}
+                    <section className="relative z-20 -mt-5 flex min-h-full flex-col rounded-t-[1.75rem] border border-slate-100 bg-white p-5 shadow-[0_-8px_30px_rgba(15,23,42,0.04)] sm:mt-0 sm:rounded-[2rem] sm:p-7 sm:shadow-sm lg:p-9">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            {product.category ? (
+                                <span className="rounded-full bg-slate-100 px-3.5 py-1.5 text-xs font-bold capitalize tracking-wide text-slate-600">
+                                    {product.category}
                                 </span>
                             ) : (
-                                <span
-                                    className="
-                                        inline-flex
-                                        items-center
-                                        bg-white
-                                        text-red-500
-                                        px-3
-                                        py-2
-                                        rounded-xl
-                                        text-xs
-                                        font-bold
-                                        shadow-md
-                                    "
-                                >
+                                <span />
+                            )}
+
+                            {stock > 0 ? (
+                                <span className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600">
+                                    <span className="relative flex h-2.5 w-2.5">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
+                                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                    </span>
+                                    {stock <= 5 ? `Only ${stock} left` : "In Stock"}
+                                </span>
+                            ) : (
+                                <span className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600">
                                     Out of Stock
                                 </span>
                             )}
                         </div>
-                    </div>
 
-                    {/* ==================================
-                        PRODUCT INFORMATION
-                    ================================== */}
-
-                    <div
-                        className="
-                            p-5
-                            sm:p-7
-                            lg:p-9
-                            flex
-                            flex-col
-                        "
-                    >
-
-                        {/* CATEGORY */}
-
-                        {product.category && (
-                            <span
-                                className="
-                                    w-fit
-                                    text-xs
-                                    font-bold
-                                    text-[var(--primary)]
-                                    bg-[var(--primary-light)]
-                                    px-3
-                                    py-1.5
-                                    rounded-full
-                                    uppercase
-                                    tracking-wide
-                                "
-                            >
-                                {product.category}
-                            </span>
-                        )}
-
-                        {/* PRODUCT NAME */}
-
-                        <h1
-                            className="
-                                text-2xl
-                                sm:text-3xl
-                                lg:text-4xl
-                                font-extrabold
-                                leading-tight
-                                text-[var(--text-main)]
-                                mt-4
-                            "
-                        >
+                        <h1 className="mt-4 break-words text-2xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-3xl lg:text-[2.15rem]">
                             {product.name}
                         </h1>
 
-                        {/* WEIGHT */}
-
                         {product.weight && (
-                            <div
-                                className="
-                                    flex
-                                    items-center
-                                    gap-2
-                                    mt-3
-                                    text-sm
-                                    font-semibold
-                                    text-gray-500
-                                "
-                            >
-                                <Package size={17} />
-
-                                <span>
-                                    {product.weight}
-                                </span>
+                            <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                                <Package size={16} />
+                                {product.weight}
                             </div>
                         )}
 
-                        {/* PRICE */}
-
-                        <div className="mt-6">
-
-                            <div
-                                className="
-                                    flex
-                                    items-center
-                                    gap-3
-                                    flex-wrap
-                                "
-                            >
-                                <span
-                                    className="
-                                        text-3xl
-                                        sm:text-4xl
-                                        font-extrabold
-                                        text-[var(--primary)]
-                                    "
-                                >
-                                    ₹{finalPrice}
-                                </span>
+                        {/* Price */}
+                        <div className="mt-6 rounded-2xl bg-slate-950 p-5 text-white sm:p-6">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-medium text-slate-400">
+                                        {hasOffer ? "Special price" : "Price"}
+                                    </p>
+                                    <div className=" flex flex-wrap items-baseline gap-2.5">
+                                        <span className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+                                            ₹{finalPrice}
+                                        </span>
+                                        {hasOffer && (
+                                            <span className="text-base font-medium text-slate-400 line-through">
+                                                ₹{price}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="mt-1.5 text-xs text-slate-400">
+                                        {hasOffer ? "Limited time offer" : "Best price"}
+                                    </p>
+                                </div>
 
                                 {hasOffer && (
-                                    <span
-                                        className="
-                                            text-base
-                                            sm:text-lg
-                                            text-gray-400
-                                            line-through
-                                        "
-                                    >
-                                        ₹{price}
-                                    </span>
+                                    <div className="shrink-0 rounded-xl bg-emerald-400/10 px-3.5 py-3 text-right ring-1 ring-inset ring-emerald-300/20">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+                                            You save
+                                        </p>
+                                        <p className="mt-1 text-lg font-extrabold text-emerald-300">
+                                            ₹{savedAmount}
+                                        </p>
+                                    </div>
                                 )}
                             </div>
-
-                            {hasOffer && (
-                                <div
-                                    className="
-                                        flex
-                                        items-center
-                                        gap-2
-                                        mt-2
-                                    "
-                                >
-                                    <span
-                                        className="
-                                            text-xs
-                                            font-bold
-                                            text-green-600
-                                            bg-green-50
-                                            px-2.5
-                                            py-1
-                                            rounded-lg
-                                        "
-                                    >
-                                        Save ₹{savedAmount}
-                                    </span>
-
-                                    <span
-                                        className="
-                                            text-xs
-                                            text-gray-500
-                                        "
-                                    >
-                                        Limited time offer
-                                    </span>
-                                </div>
-                            )}
                         </div>
 
-                        {/* DIVIDER */}
-
-                        <div className="h-px bg-gray-100 my-6" />
-
-                        {/* DESCRIPTION */}
-
-                        {product.description && (
-                            <div>
-                                <h2
-                                    className="
-                                        text-base
-                                        sm:text-lg
-                                        font-bold
-                                        text-[var(--text-main)]
-                                    "
-                                >
-                                    Product Details
-                                </h2>
-
-                                <p
-                                    className="
-                                        text-sm
-                                        leading-6
-                                        text-gray-500
-                                        mt-2
-                                        whitespace-pre-line
-                                    "
-                                >
-                                    {product.description}
-                                </p>
-                            </div>
-                        )}
-
-                        {/* BENEFITS */}
-
-                        <div
-                            className="
-                                grid
-                                grid-cols-2
-                                gap-2
-                                mt-6
-                            "
-                        >
-                            <div
-                                className="
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    p-3
-                                "
-                            >
-                                <div
-                                    className="
-                                        flex
-                                        items-center
-                                        gap-2
-                                        text-[var(--primary)]
-                                    "
-                                >
-                                    <Truck size={18} />
-
-                                    <span
-                                        className="
-                                            text-xs
-                                            font-bold
-                                        "
-                                    >
-                                        Fast Delivery
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div
-                                className="
-                                    bg-[var(--primary-light)]
-                                    rounded-xl
-                                    p-3
-                                "
-                            >
-                                <div
-                                    className="
-                                        flex
-                                        items-center
-                                        gap-2
-                                        text-[var(--primary)]
-                                    "
-                                >
-                                    <ShieldCheck size={18} />
-
-                                    <span
-                                        className="
-                                            text-xs
-                                            font-bold
-                                        "
-                                    >
-                                        Quality Assured
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* ==================================
-                            CART SECTION
-                        ================================== */}
-
-                        <div className="mt-7">
-
+                        {/* Cart controls */}
+                        <div className=" border-t border-slate-100 pt-6">
                             {stock > 0 && quantity > 0 ? (
                                 <div>
-
-                                    <div
-                                        className="
-                                            flex
-                                            items-center
-                                            justify-between
-                                            h-14
-                                            border-2
-                                            border-[var(--primary)]
-                                            rounded-2xl
-                                            overflow-hidden
-                                        "
-                                    >
-                                        <button
-                                            onClick={() =>
-                                                decreaseQuantity(
-                                                    product.id
-                                                )
-                                            }
-                                            className="
-                                                w-16
-                                                h-full
-                                                bg-[var(--primary-light)]
-                                                hover:bg-gray-100
-                                                flex
-                                                items-center
-                                                justify-center
-                                                text-[var(--primary)]
-                                                transition
-                                            "
-                                        >
-                                            <Minus size={20} />
-                                        </button>
-
-                                        <div className="text-center">
-                                            <span
-                                                className="
-                                                    block
-                                                    text-lg
-                                                    font-extrabold
-                                                    text-[var(--text-main)]
-                                                "
+                                    <div className="flex gap-3">
+                                        <div className="flex h-14 min-w-0 flex-1 items-center justify-between overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                                            <button
+                                                onClick={() => decreaseQuantity(product.id)}
+                                                aria-label="Decrease quantity"
+                                                className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-200 active:scale-95"
                                             >
-                                                {quantity}
-                                            </span>
+                                                <Minus size={19} />
+                                            </button>
 
-                                            <span
-                                                className="
-                                                    block
-                                                    text-[10px]
-                                                    text-gray-400
-                                                    font-medium
-                                                "
+                                            <div className="text-center">
+                                                <span className="block text-lg font-extrabold leading-tight text-slate-900">
+                                                    {quantity}
+                                                </span>
+                                                <span className="block text-[10px] font-semibold text-slate-500">
+                                                    ₹{finalPrice * quantity}
+                                                </span>
+                                            </div>
+
+                                            <button
+                                                onClick={() => increaseQuantity(product.id)}
+                                                disabled={quantity >= stock}
+                                                aria-label="Increase quantity"
+                                                className="flex h-full w-14 items-center justify-center bg-slate-900 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                                             >
-                                                In Cart
-                                            </span>
+                                                <Plus size={19} />
+                                            </button>
                                         </div>
 
                                         <button
-                                            onClick={() =>
-                                                increaseQuantity(
-                                                    product.id
-                                                )
-                                            }
-                                            disabled={
-                                                quantity >= stock
-                                            }
-                                            className="
-                                                w-16
-                                                h-full
-                                                bg-[var(--primary)]
-                                                hover:bg-[var(--primary-dark)]
-                                                disabled:bg-gray-300
-                                                text-white
-                                                flex
-                                                items-center
-                                                justify-center
-                                                transition
-                                            "
+                                            onClick={() => navigate("/cart")}
+                                            className="inline-flex h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/15 transition hover:bg-emerald-700 active:scale-[0.97] sm:px-5"
                                         >
-                                            <Plus size={20} />
+                                            <ShoppingCart size={18} />
+                                            <span className="hidden xs:inline">View Cart</span>
+                                            <span className="xs:hidden">Cart</span>
                                         </button>
                                     </div>
 
                                     {quantity >= stock && (
-                                        <p
-                                            className="
-                                                text-center
-                                                text-xs
-                                                text-gray-400
-                                                mt-2
-                                            "
-                                        >
-                                            Maximum available quantity
-                                            reached
+                                        <p className="mt-3 text-center text-xs font-medium text-slate-400">
+                                            Maximum available quantity reached
                                         </p>
                                     )}
                                 </div>
                             ) : stock > 0 ? (
                                 <button
                                     onClick={handleAddToCart}
-                                    className="
-                                        w-full
-                                        h-14
-                                        bg-[var(--primary)]
-                                        hover:bg-[var(--primary-dark)]
-                                        text-white
-                                        rounded-2xl
-                                        font-bold
-                                        flex
-                                        items-center
-                                        justify-center
-                                        gap-2
-                                        shadow-lg
-                                        shadow-black/10
-                                        active:scale-[0.98]
-                                        transition
-                                    "
+                                    className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-base font-extrabold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                                 >
-                                    <ShoppingCart size={21} />
-
+                                    <ShoppingCart size={20} />
                                     Add to Cart
-
-                                    <span className="opacity-70">
-                                        •
-                                    </span>
-
-                                    <span>
-                                        ₹{finalPrice}
-                                    </span>
+                                    <span className="mx-0.5 text-emerald-200">·</span>
+                                    ₹{finalPrice}
                                 </button>
                             ) : (
                                 <button
                                     disabled
-                                    className="
-                                        w-full
-                                        h-14
-                                        bg-gray-200
-                                        text-gray-500
-                                        rounded-2xl
-                                        font-bold
-                                        cursor-not-allowed
-                                    "
+                                    className="h-14 w-full cursor-not-allowed rounded-2xl bg-slate-100 font-extrabold text-slate-400"
                                 >
                                     Out of Stock
                                 </button>
                             )}
                         </div>
 
-                        {/* CART LINK */}
-
-                        {quantity > 0 && (
-                            <button
-                                onClick={() =>
-                                    navigate("/cart")
-                                }
-                                className="
-                                    w-full
-                                    mt-3
-                                    h-11
-                                    rounded-xl
-                                    border
-                                    border-gray-200
-                                    text-[var(--primary)]
-                                    text-sm
-                                    font-semibold
-                                    hover:bg-[var(--primary-light)]
-                                    transition
-                                "
-                            >
-                                View Cart →
-                            </button>
+                        {/* Description */}
+                        {product.description && (
+                            <div className="mt-7">
+                                <h2 className="text-base font-extrabold tracking-tight text-slate-900">
+                                    About this product
+                                </h2>
+                                <p
+                                    className={`mt-2 whitespace-pre-line text-sm leading-7 text-slate-500 ${
+                                        longDescription && !descOpen ? "line-clamp-3" : ""
+                                    }`}
+                                >
+                                    {product.description}
+                                </p>
+                                {longDescription && (
+                                    <button
+                                        onClick={() => setDescOpen((v) => !v)}
+                                        className="mt-2 text-sm font-bold text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:decoration-slate-900"
+                                    >
+                                        {descOpen ? "Show less" : "Read more"}
+                                    </button>
+                                )}
+                            </div>
                         )}
-                    </div>
+
+                        {/* Store benefits */}
+                        <div className="mt-7 grid grid-cols-2 gap-3">
+                            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                                    <Truck size={19} />
+                                </span>
+                                <span className="text-xs font-bold leading-snug text-slate-700">
+                                    Fast Delivery
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                                    <ShieldCheck size={19} />
+                                </span>
+                                <span className="text-xs font-bold leading-snug text-slate-700">
+                                    Quality Assured
+                                </span>
+                            </div>
+                        </div>
+
+                    </section>
                 </div>
-                {/* <OfferStrip />
-                <DealsSection />
-                <Banner /> */}
             </div>
         </main>
     );
 }
 
-export default ProductDetails; 
+export default ProductDetails;

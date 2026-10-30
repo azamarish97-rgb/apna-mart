@@ -384,13 +384,11 @@ function Navbar() {
             }}
         >
             {/* HEADER BACKGROUND */}
-
             <div
-                className={`relative overflow-hidden bg-red-800 transition-all duration-300 ease-in-out ${isScrolled ? "shadow-md" : "shadow-lg"
+                className={`relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 animate-gradient transition-all duration-300 ease-in-out ${isScrolled ? "shadow-md" : "shadow-lg"
                     }`}
                 style={mediaStyle}
-            >
-                {/* VIDEO BACKGROUND */}
+            >  {/* VIDEO BACKGROUND */}
 
                 {hasMedia && navbarMedia.media_type === "video" && (
                     <video

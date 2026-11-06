@@ -8,108 +8,142 @@ import "swiper/css";
 import "swiper/css/free-mode";
 
 import { supabase } from "./supabase";
+import { HandHeart } from "lucide-react";
 
 // =====================================================
 // CATEGORY NAME KE HISAB SE EMOJI
 // =====================================================
 
+import {
+    ShoppingCart,
+    CupSoda,
+    Milk,
+    Carrot,
+    Apple,
+    Cookie,
+    Coffee,
+    Wheat,
+    Soup,
+    Bean,
+    Droplets,
+    Flame,
+    Candy,
+    Package,
+    Croissant,
+    Nut,
+    SprayCan,
+    Bath,
+    Baby,
+    House,
+    Pencil,
+    Dog,
+    FlameKindling,
+    Snowflake,
+    Utensils,
+    Citrus,
+    Cookie as BiscuitIcon,
+    Popcorn,
+    CookingPot,
+    IceCreamCone,
+    Leaf,
+    Sparkles,
+} from "lucide-react";
+
 const categoryEmoji = {
-    Grocery: "🛒",
+    Grocery: ShoppingCart,
 
-    "Cold Drink": "🥤",
-    "Cold Drinks": "🥤",
 
-    Dairy: "🥛",
 
-    Vegetable: "🥦",
-    Vegetables: "🥦",
+    "Cold Drink": CupSoda,
+    "Cold Drinks": CupSoda,
 
-    Fruits: "🍎",
-    Fruit: "🍎",
+    Dairy: Milk,
 
-    Snacks: "🍪",
+    "Ice Cream": IceCreamCone,
+    "Ice Creams": IceCreamCone,
+    "Icecream": IceCreamCone,
+    "Icecreams": IceCreamCone,
 
-    Beverages: "🥤",
+    Vegetable: Carrot,
+    Vegetables: Carrot,
 
-    "Rice & Grains": "🍚",
-    Rice: "🍚",
-    Grains: "🌾",
+    Fruits: Apple,
+    Fruit: Apple,
 
-    "Atta & Flour": "🌾",
-    Atta: "🌾",
-    Flour: "🥣",
+    Snacks: Popcorn,
+    Beverages: CupSoda,
 
-    "Dal & Pulses": "🫘",
-    Dal: "🫘",
-    Pulses: "🫘",
+    "Rice & Grains": Wheat,
+    Rice: Wheat,
+    Grains: Wheat,
 
-    "Oil & Ghee": "🫗",
-    Oil: "🫗",
-    Ghee: "🧈",
+    "Atta & Flour": Wheat,
+    Atta: Wheat,
+    Flour: Soup,
 
-    "Spices & Masala": "🌶️",
-    Spices: "🌶️",
-    Masala: "🌶️",
+    "Dal & Pulses": Bean,
+    Dal: Bean,
+    Pulses: Bean,
 
-    "Biscuits & Cookies": "🍪",
-    Biscuits: "🍪",
-    Cookies: "🍪",
+    "Oil & Ghee": Droplets,
+    Oil: Droplets,
+    Ghee: CookingPot,
 
-    "Tea & Coffee": "☕",
-    Tea: "🍵",
-    Coffee: "☕",
+    "Spices & Masala": Flame,
+    Spices: Flame,
+    Masala: Flame,
 
-    "Sweets & Chocolates": "🍫",
-    Sweets: "🍬",
-    Chocolates: "🍫",
+    "Biscuits & Cookies": BiscuitIcon,
+    Biscuits: BiscuitIcon,
+    Cookies: BiscuitIcon,
 
-    "Packaged Food": "🥫",
-    "Ready to Eat": "🍱",
+    "Tea & Coffee": Coffee,
+    Tea: Coffee,
+    Coffee: Coffee,
 
-    "Breakfast": "🥣",
-    Cereals: "🥣",
+    "Sweets & Chocolates": Candy,
+    Sweets: Candy,
+    Chocolates: Candy,
 
-    "Bread & Bakery": "🍞",
-    Bakery: "🥐",
-    Bread: "🍞",
+    "Packaged Food": Package,
+    "Ready to Eat": Utensils,
 
-    "Dry Fruits": "🥜",
-    "Dry Fruits & Nuts": "🥜",
-    Nuts: "🥜",
+    Breakfast: Soup,
+    Cereals: Wheat,
 
-    "Personal Care": "🧴",
+    "Bread & Bakery": Croissant,
+    Bakery: Croissant,
+    Bread: Croissant,
 
-    "Hair Care": "🧴",
-    "Skin Care": "🧴",
+    "Dry Fruits": Nut,
+    "Dry Fruits & Nuts": Nut,
+    Nuts: Nut,
 
-    "Bath & Body": "🛁",
+    "personal care": HandHeart,
+    "Hair Care": Sparkles,
+    "Skin Care": Sparkles,
+    "Bath & Body": Bath,
+    "Baby Care": Baby,
 
-    "Baby Care": "🍼",
 
-    "Cleaning & Household": "🧹",
-    Cleaning: "🧹",
-    Household: "🏠",
+    "Bath & Body": Bath,
+    "Baby Care": Baby,
 
-    "Home Care": "🏠",
+    "Cleaning & Household": House,
+    Cleaning: SprayCan,
+    Household: House,
 
-    "Stationery": "✏️",
-
-    "Pet Care": "🐶",
-
-    "Pooja Items": "🪔",
-
-    "Frozen Food": "❄️",
-
-    "Instant Food": "🍜",
-
-    "Sauces & Spreads": "🍯",
-
-    "Pickles & Papad": "🥒",
-
-    "Salt & Sugar": "🧂",
-
-    Sugar: "🍚",
-    Salt: "🧂",
+    "Home Care": House,
+    Stationery: Pencil,
+    "Pet Care": Dog,
+    "Pooja Items": FlameKindling,
+    "Frozen Food": Snowflake,
+    "Instant Food": CookingPot,
+    "Sauces & Spreads": Droplets,
+    "Pickles & Papad": Citrus,
+    "Salt & Sugar": CookingPot,
+    Sugar: CookingPot,
+    Salt: CookingPot,
 };
 
 // =====================================================
@@ -257,8 +291,18 @@ function Categories() {
                             "
                         >
 
-                            <div className="text-3xl">
-                                {categoryEmoji[cat] || "🛒"}
+                            <div className="w-12 h-12 mx-auto rounded-xl bg-blue-50 flex items-center justify-center">
+                                {(() => {
+                                    const Icon = categoryEmoji[cat] || ShoppingCart;
+
+                                    return (
+                                        <Icon
+                                            size={26}
+                                            strokeWidth={1.8}
+                                            className="text-blue-600"
+                                        />
+                                    );
+                                })()}
                             </div>
 
                             <p

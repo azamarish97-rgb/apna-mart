@@ -582,11 +582,22 @@ function Cart() {
                                             Mobile
                                         </label>
 
-                                        <div className="w-full bg-gray-100 border rounded-lg px-4 py-3 text-gray-700">
-                                            {profile?.mobile ||
-                                                customer.mobile ||
-                                                "Not available"}
-                                        </div>
+                                        <input
+                                            type="tel"
+                                            inputMode="numeric"
+                                            maxLength={10}
+                                            placeholder="Enter mobile number"
+                                            value={customer.mobile}
+                                            onChange={(e) => {
+                                                const value = e.target.value.replace(/\D/g, "");
+
+                                                setCustomer((current) => ({
+                                                    ...current,
+                                                    mobile: value.slice(0, 10),
+                                                }));
+                                            }}
+                                            className="w-full border rounded-lg px-4 py-3 text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
 
                                     </div>
 
